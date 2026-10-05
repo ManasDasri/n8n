@@ -108,6 +108,12 @@ function walk(node: unknown, feats: Set<string>): void {
 		case 'CallExpression':
 			feats.add(callFeature(o));
 			break;
+		case 'ArrayExpression':
+			feats.add(Array.isArray(o.elements) && o.elements.length === 0 ? 'array:empty' : 'array');
+			break;
+		case 'ArrowFunctionExpression':
+			feats.add('arrow');
+			break;
 		default:
 			break;
 	}
@@ -250,6 +256,19 @@ const CANDIDATES = [
 	'={{ $json.item.names.flat(2) }}',
 	'={{ $json.item.names.toSorted() }}',
 	'={{ $json.item.names.toReversed() }}',
+	// array literals
+	'={{ [1, "a", true, null] }}',
+	'={{ [] }}',
+	'={{ ["bar"].includes($json.item.name) }}',
+	// iterator methods with a callback
+	'={{ $json.item.names.some(n => n === "bar") }}',
+	'={{ $json.item.names.every(n => n === "bar") }}',
+	'={{ $json.item.names.find(n => n === "bar") }}',
+	'={{ $json.item.names.filter(n => n === "bar") }}',
+	'={{ $json.item.names.map(n => n.length) }}',
+	'={{ $json.item.names?.map(n => n) }}',
+	'={{ $json.item.names.map(n => $json.item.count) }}',
+	'={{ $json.item.names.map(n => n.missing?.deep ?? "d") }}',
 	// compound shapes
 	'={{ $json.item.name.trim().toUpperCase() }}',
 	'={{ $json.item.name.toUpperCase().length }}',
