@@ -74,6 +74,7 @@ vi.mock('@n8n/stores/useRootStore', () => ({
 	useRootStore: () => ({ restApiContext: { baseUrl: '/rest' } }),
 }));
 let onHistoryLoaded: ((count: number) => void) | undefined;
+let onAgentUnavailable: (() => void) | undefined;
 
 const fatalErrorMock = ref<{ missing: string[] } | null>(null);
 
@@ -246,8 +247,12 @@ vi.mock('../components/AgentChatMessageList.vue', () => ({
 }));
 
 vi.mock('../composables/useAgentChatStream', () => ({
-	useAgentChatStream: (options: { onHistoryLoaded: (count: number) => void }) => {
+	useAgentChatStream: (options: {
+		onHistoryLoaded: (count: number) => void;
+		onAgentUnavailable?: () => void;
+	}) => {
 		onHistoryLoaded = options.onHistoryLoaded;
+		onAgentUnavailable = options.onAgentUnavailable;
 		return {
 			capabilities: computed(() => ({
 				steer: true,
@@ -324,6 +329,7 @@ describe('AgentChatPanel', () => {
 		respondToApprovalMock.mockReset().mockResolvedValue(undefined);
 		fatalErrorMock.value = null;
 		onHistoryLoaded = undefined;
+		onAgentUnavailable = undefined;
 	});
 
 	function mountPanel(
@@ -2791,6 +2797,14 @@ describe('AgentChatPanel', () => {
 		expect(wrapper.text()).toContain('MCP server');
 		expect(wrapper.text()).toContain('Sub-agent');
 		expect(wrapper.text()).toContain('integrations.0.credentialId');
+	});
+
+	it('emits agent-unavailable when the stream reports the agent is no longer available', () => {
+		const wrapper = mountPanel();
+
+		onAgentUnavailable?.();
+
+		expect(wrapper.emitted('agent-unavailable')).toHaveLength(1);
 	});
 });
 

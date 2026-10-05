@@ -133,6 +133,8 @@ const emit = defineEmits<{
 	'send-to-assistant': [event?: AgentSendToAssistantEvent];
 	/** The chat's first user message, for a host to title a thread that has no title yet. */
 	'first-user-message': [text: string | undefined];
+	/** The agent became unavailable in this channel (unpublished before send, or mid-run/resume). */
+	'agent-unavailable': [];
 }>();
 
 const locale = useI18n();
@@ -181,6 +183,7 @@ const {
 		}
 	},
 	onSessionCreated: (sessionId) => emit('session-created', sessionId),
+	onAgentUnavailable: () => emit('agent-unavailable'),
 	budgetCards: props.budgetCards,
 });
 
