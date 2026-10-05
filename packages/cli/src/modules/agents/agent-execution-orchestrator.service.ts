@@ -21,6 +21,7 @@ import {
 	AgentChatExecutionService,
 	type CancelSuspendedRunParams,
 } from './agent-chat-execution.service';
+import { AgentN8nChatUnavailableError } from './agent-n8n-chat-unavailable.error';
 import type { AgentThreadAccess } from './entities/agent-execution-thread.entity';
 import type { AgentSessionMode } from './utils/agent-thread-access';
 import {
@@ -452,7 +453,7 @@ export class AgentExecutionOrchestratorService {
 			resume.source === N8N_CHAT_PRODUCTION_SOURCE &&
 			!(await this.agentRepository.isN8nChatPublished(resume.agentId, resume.projectId))
 		) {
-			throw new UserError('This agent is not available in n8n Chat');
+			throw new AgentN8nChatUnavailableError();
 		}
 		const checkpoint = await this.loadResumeCheckpoint(resume);
 		yield* this.withRuntimeLease(
@@ -700,7 +701,7 @@ export class AgentExecutionOrchestratorService {
 			sessionMode = 'new',
 		} = config;
 		if (!(await this.agentRepository.isN8nChatPublished(agentId, projectId))) {
-			throw new UserError('This agent is not available in n8n Chat');
+			throw new AgentN8nChatUnavailableError();
 		}
 		if (
 			memory.resourceId !== productionChatMemoryResourceId(user.id) ||
