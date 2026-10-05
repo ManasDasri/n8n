@@ -10,4 +10,9 @@ import type { PolicySelector } from './policy-rule.types';
 export const policySelectorSchema = z.discriminatedUnion('kind', [
 	z.object({ kind: z.literal('name'), value: z.string().min(1) }),
 	z.object({ kind: z.literal('package'), value: z.string().min(1) }),
+	z
+		.object({ kind: z.literal('extends'), value: z.string().min(1) })
+		.describe(
+			'Credential type policies only: matches the named credential type and every type that extends it',
+		),
 ]) satisfies z.ZodType<PolicySelector>;

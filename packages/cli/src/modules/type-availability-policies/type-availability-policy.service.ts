@@ -16,7 +16,13 @@ import { TypeAvailabilityPolicyScopeRepository } from './database/repositories/t
 import { TypeAvailabilityPolicyRepository } from './database/repositories/type-availability-policy.repository';
 import type { TypeAvailabilityPolicy } from './database/entities/type-availability-policy.entity';
 import type { TypeAvailabilityPolicyScope } from './database/entities/type-availability-policy-scope.entity';
-import { isPackageInstalled, packageResolverFor, policedTypeFor } from './package-resolver';
+import { CREDENTIAL_TYPES_KIND } from './constants';
+import {
+	isCredentialTypeKnown,
+	isPackageInstalled,
+	packageResolverFor,
+	policedTypeFor,
+} from './package-resolver';
 import { evaluateComposedType, orderedAttachments, type ComposedVerdict } from './policy-evaluator';
 import type {
 	PolicyAction,
@@ -227,6 +233,34 @@ function assertPackagesInstalled(
 	}
 }
 
+/**
+ * Only credential types declare `extends`, so the selector means nothing for another kind. An
+ * unknown base would match nothing, the same trap `assertPackagesInstalled` closes.
+ */
+function assertExtendsSelectorsValid(
+	kind: string,
+	rules: readonly PolicyRule[],
+	loadNodesAndCredentials: LoadNodesAndCredentials,
+): void {
+	const values = rules.flatMap((rule) =>
+		rule.selector.kind === 'extends' ? [rule.selector.value] : [],
+	);
+	if (values.length === 0) return;
+
+	if (kind !== CREDENTIAL_TYPES_KIND) {
+		throw new UserError('An "extends" rule is only valid in a credential type policy');
+	}
+
+	const unknown = new Set(
+		values.filter((value) => !isCredentialTypeKnown(loadNodesAndCredentials, value)),
+	);
+	if (unknown.size > 0) {
+		throw new UserError(
+			`Extends rule names a credential type that is not installed: ${[...unknown].join(', ')}`,
+		);
+	}
+}
+
 /** Mirrors the DTO-level check in `ReplaceAttachmentsDto`, as a defensive service-level guard. */
 function assertNoDuplicateAttachmentSlots(attachments: readonly AttachmentInput[]): void {
 	const seenPolicyIds = new Set<string>();
@@ -431,10 +465,11 @@ export class TypeAvailabilityPolicyService {
 		updatedBy: string,
 	): Promise<PolicyDocumentWrite> {
 		assertPackagesInstalled(rules, this.loadNodesAndCredentials);
+		assertExtendsSelectorsValid(kind, rules, this.loadNodesAndCredentials);
 		const warnings = lintRulesForShadowing(
 			rules,
 			packageResolverFor(kind, this.loadNodesAndCredentials),
-			policedTypeFor(kind, this.nodeTypes),
+			policedTypeFor(kind, this.nodeTypes, this.loadNodesAndCredentials),
 		);
 
 		const policy = await this.policyRepository.createPolicy({ kind, rules, updatedBy }, {});
@@ -469,10 +504,11 @@ export class TypeAvailabilityPolicyService {
 		updatedBy: string,
 	): Promise<PolicyDocumentWrite> {
 		assertPackagesInstalled(rules, this.loadNodesAndCredentials);
+		assertExtendsSelectorsValid(kind, rules, this.loadNodesAndCredentials);
 		const warnings = lintRulesForShadowing(
 			rules,
 			packageResolverFor(kind, this.loadNodesAndCredentials),
-			policedTypeFor(kind, this.nodeTypes),
+			policedTypeFor(kind, this.nodeTypes, this.loadNodesAndCredentials),
 		);
 
 		const result = await this.transactionRunner.run({}, async (ctx) => {
@@ -723,11 +759,12 @@ export class TypeAvailabilityPolicyService {
 	}> {
 		assertNoDelegateAtProjectScope(projectId, input.defaultAction, input.rules);
 		assertPackagesInstalled(input.rules, this.loadNodesAndCredentials);
+		assertExtendsSelectorsValid(kind, input.rules, this.loadNodesAndCredentials);
 
 		const warnings = lintRulesForShadowing(
 			input.rules,
 			packageResolverFor(kind, this.loadNodesAndCredentials),
-			policedTypeFor(kind, this.nodeTypes),
+			policedTypeFor(kind, this.nodeTypes, this.loadNodesAndCredentials),
 		);
 
 		const result = await this.transactionRunner.run({}, async (ctx) => {
@@ -938,7 +975,7 @@ export class TypeAvailabilityPolicyService {
 		return evaluateComposedType(
 			instance,
 			project,
-			policedTypeFor(kind, this.nodeTypes)(typeName),
+			policedTypeFor(kind, this.nodeTypes, this.loadNodesAndCredentials)(typeName),
 			packageResolverFor(kind, this.loadNodesAndCredentials),
 		);
 	}
@@ -974,7 +1011,7 @@ export class TypeAvailabilityPolicyService {
 	): Promise<ComposedTypeEvaluation> {
 		const { instance, project } = await this.readComposedScopes(kind, projectId);
 		const resolvePackage = packageResolverFor(kind, this.loadNodesAndCredentials);
-		const policedType = policedTypeFor(kind, this.nodeTypes);
+		const policedType = policedTypeFor(kind, this.nodeTypes, this.loadNodesAndCredentials);
 
 		return {
 			verdicts: typeNames.map((name) => ({

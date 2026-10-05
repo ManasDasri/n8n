@@ -13,6 +13,12 @@ describe('policySelectorSchema', () => {
 		).toBe(true);
 	});
 
+	it('accepts a valid extends selector', () => {
+		expect(policySelectorSchema.safeParse({ kind: 'extends', value: 'oAuth2Api' }).success).toBe(
+			true,
+		);
+	});
+
 	it('rejects an empty value', () => {
 		expect(policySelectorSchema.safeParse({ kind: 'name', value: '' }).success).toBe(false);
 	});

@@ -3,10 +3,14 @@
  * request DTOs and by the backend evaluator.
  */
 
-/** Matches a node type by its exact full name, or by its package segment. */
+/**
+ * Matches a type by its exact full name, or by its package segment. `extends` is for credential
+ * types only: it matches the named type and every type built on it through `extends`.
+ */
 export type PolicySelector =
 	| { readonly kind: 'name'; readonly value: string }
-	| { readonly kind: 'package'; readonly value: string };
+	| { readonly kind: 'package'; readonly value: string }
+	| { readonly kind: 'extends'; readonly value: string };
 
 export type PolicyAction = 'allow' | 'deny' | 'delegate';
 
