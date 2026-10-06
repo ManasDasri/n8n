@@ -8,12 +8,7 @@ import { BadRequestError } from '@n8n/errors';
 import { NodeTypes } from '@/node-types';
 import * as WorkflowHelpers from '@/workflow-helpers';
 
-import {
-	agentsInScope,
-	deriveParentFolderId,
-	foldersInScope,
-	workflowsInScope,
-} from './package-layout';
+import { entriesInScope, deriveParentFolderId } from './package-layout';
 import type { PreparedAgent } from '../entities/agent/agent-import.types';
 import type { PreparedFolder } from '../entities/folder/folder-import.types';
 import type { PreparedProject } from '../entities/project/project-import.types';
@@ -77,7 +72,7 @@ export class N8nPackageParser {
 		const folderTargetToId = new Map((manifest.folders ?? []).map((f) => [f.target, f.id]));
 
 		const workflows: PreparedWorkflow[] = [];
-		for (const entry of workflowsInScope(manifest.workflows, basePrefix)) {
+		for (const entry of entriesInScope(manifest.workflows, ['workflows', 'folders'], basePrefix)) {
 			const parentFolderId = deriveParentFolderId(entry.target, folderTargetToId);
 			workflows.push(await this.readWorkflow(reader, entry, parentFolderId));
 		}
@@ -87,7 +82,7 @@ export class N8nPackageParser {
 	async getAgents(reader: PackageReader, basePrefix = ''): Promise<PreparedAgent[]> {
 		const manifest = await this.getManifest(reader);
 		const agents: PreparedAgent[] = [];
-		for (const entry of agentsInScope(manifest, basePrefix)) {
+		for (const entry of entriesInScope(manifest.agents, ['agents'], basePrefix)) {
 			agents.push(await this.readAgent(reader, entry));
 		}
 		return agents;
@@ -97,7 +92,7 @@ export class N8nPackageParser {
 		const manifest = await this.getManifest(reader);
 
 		const folders: PreparedFolder[] = [];
-		for (const entry of foldersInScope(manifest.folders, basePrefix)) {
+		for (const entry of entriesInScope(manifest.folders, ['folders'], basePrefix)) {
 			folders.push(await this.readFolder(reader, entry));
 		}
 		return folders;

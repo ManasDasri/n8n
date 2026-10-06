@@ -4,57 +4,20 @@ import { variableMissingModeUsesPackageValue } from '../entities/variable/variab
 import type { PlacedVariableRequirement } from '../entities/variable/variable.types';
 import { VariableConflictPolicy, VariableParentPolicy } from '../n8n-packages.types';
 import type { ImportVariableProperties } from '../n8n-packages.types';
-import type { ManifestEntry, PackageManifest } from '../spec/manifest.schema';
+import { packageDirectory, type ManifestEntityCollection } from '../io/manifest-entry';
+import type { ManifestEntry } from '../spec/manifest.schema';
 import type { PackageVariableRequirement } from '../spec/requirements.schema';
 import type { SerializedVariable } from '../spec/serialized/variable.schema';
 
-export function foldersInScope(
+export function entriesInScope(
 	entries: ManifestEntry[] | undefined,
+	collections: readonly ManifestEntityCollection[],
 	basePrefix = '',
 ): ManifestEntry[] {
-	return (entries ?? []).filter((entry) => entry.target.startsWith(`${basePrefix}folders/`));
-}
-
-export function workflowsInScope(
-	entries: ManifestEntry[] | undefined,
-	basePrefix = '',
-): ManifestEntry[] {
-	return (entries ?? []).filter(
-		(entry) =>
-			entry.target.startsWith(`${basePrefix}workflows/`) ||
-			entry.target.startsWith(`${basePrefix}folders/`),
+	const prefixes = collections.map((collection) => `${basePrefix}${packageDirectory(collection)}/`);
+	return (entries ?? []).filter((entry) =>
+		prefixes.some((prefix) => entry.target.startsWith(prefix)),
 	);
-}
-
-function assertCanonicalPackagePath(target: string, label: string): void {
-	const segments = target.split('/');
-	if (
-		target.includes('\\') ||
-		segments.some((segment) => segment === '' || segment === '.' || segment === '..')
-	) {
-		throw new UserError(`Package ${label} target "${target}" must be a canonical relative path.`);
-	}
-}
-
-export function agentsInScope(manifest: PackageManifest, basePrefix = ''): ManifestEntry[] {
-	const projectTargets = new Set<string>();
-	for (const project of manifest.projects ?? []) {
-		assertCanonicalPackagePath(project.target, `project "${project.id}"`);
-		projectTargets.add(project.target);
-	}
-
-	for (const agent of manifest.agents ?? []) {
-		assertCanonicalPackagePath(agent.target, `Agent "${agent.id}"`);
-		const segments = agent.target.split('/');
-		const ownerTarget = segments.slice(0, -2).join('/');
-		if (segments.at(-2) !== 'agents' || (ownerTarget !== '' && !projectTargets.has(ownerTarget))) {
-			throw new UserError(
-				`Package Agent "${agent.id}" at "${agent.target}" must be under agents/ or a manifest-listed project.`,
-			);
-		}
-	}
-
-	return (manifest.agents ?? []).filter((entry) => entry.target.startsWith(`${basePrefix}agents/`));
 }
 
 export function needsBundledVariableValues(

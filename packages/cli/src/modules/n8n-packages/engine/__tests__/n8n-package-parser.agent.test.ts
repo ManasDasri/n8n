@@ -110,20 +110,22 @@ describe('N8nPackageParser.getAgents', () => {
 		}
 	});
 
-	it('scopes Agents by the manifest project layout', async () => {
+	it('scopes Agents by the requested package prefix', async () => {
 		const input = projectAgentsFixture();
+		delete input.manifest.projects;
 		input.manifest.agents[1] = fixture.manifest.agents[1];
 		Object.assign(input.files, fixture.files);
-		const reader = memoryReader(input);
 
-		expect((await parser.getAgents(reader)).map(({ sourceAgentId }) => sourceAgentId)).toEqual([
-			'research_source',
-		]);
-		expect(
-			(await parser.getAgents(reader, 'projects/operations/')).map(
-				({ sourceAgentId }) => sourceAgentId,
-			),
-		).toEqual(['support_source']);
+		for (const reader of await readers(input)) {
+			expect((await parser.getAgents(reader)).map(({ sourceAgentId }) => sourceAgentId)).toEqual([
+				'research_source',
+			]);
+			expect(
+				(await parser.getAgents(reader, 'projects/operations/')).map(
+					({ sourceAgentId }) => sourceAgentId,
+				),
+			).toEqual(['support_source']);
+		}
 	});
 
 	it('accepts null draft configuration and version metadata with inline bodies', async () => {
@@ -283,20 +285,4 @@ describe('N8nPackageParser.getAgents', () => {
 			);
 		},
 	);
-
-	it.each([
-		'agents/support/../../agents/research',
-		'projects/unlisted/agents/support',
-		'agents/support/child',
-		'/agents/support',
-		'agents//support',
-		'agents/./support',
-		'agents\\support',
-		'agents/support/',
-	])('rejects an invalid Agent location: %s', async (target) => {
-		fixture.manifest.agents[0].target = target;
-		for (const reader of await readers(fixture)) {
-			await expect(parser.getAgents(reader)).rejects.toThrow('Agent "support_source"');
-		}
-	});
 });
