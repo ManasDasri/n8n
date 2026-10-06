@@ -1,17 +1,30 @@
 import {
+	AssignMigrationOwnerDto,
 	BreakingChangeLightReportResult,
 	BreakingChangeReportQueryDto,
 	BreakingChangeVersion,
 	BreakingChangeWorkflowRuleResult,
+	MigrationWorkflowOwnerResponse,
 	WorkflowMigrationResult,
 } from '@n8n/api-types';
 import { AuthenticatedRequest } from '@n8n/db';
-import { Get, RestController, GlobalScope, Query, Post, Param } from '@n8n/decorators';
+import {
+	Body,
+	Delete,
+	Get,
+	GlobalScope,
+	Param,
+	Post,
+	Put,
+	Query,
+	RestController,
+} from '@n8n/decorators';
 import { NotFoundError } from '@n8n/errors';
 import { Response } from 'express';
 
 import { BreakingChangeMigrationService } from './breaking-changes.migration.service';
 import { RuleRegistry } from './breaking-changes.rule-registry.service';
+import { MigrationOwnerAssignmentService } from './owners/migration-owner-assignment.service';
 import { MigrationFindingQueryService } from './query/migration-finding-query.service';
 import { MigrationFindingSyncService } from './sync/migration-finding-sync.service';
 import { isWorkflowLevelRule } from './types';
@@ -26,6 +39,7 @@ export class BreakingChangesController {
 		private readonly syncService: MigrationFindingSyncService,
 		private readonly queryService: MigrationFindingQueryService,
 		private readonly ruleRegistry: RuleRegistry,
+		private readonly ownerAssignmentService: MigrationOwnerAssignmentService,
 	) {}
 
 	/**
@@ -79,6 +93,31 @@ export class BreakingChangesController {
 		const version = rule.getMetadata().version;
 		await this.syncService.syncIfStale(version);
 		return await this.queryService.getRuleFindings(version, ruleId);
+	}
+
+	/** Makes the given user the owner of the workflow's findings. */
+	@Put('/workflows/:workflowId/owner')
+	@GlobalScope('breakingChanges:migrate')
+	async assignOwner(
+		req: AuthenticatedRequest,
+		_res: Response,
+		@Param('workflowId') workflowId: string,
+		@Body body: AssignMigrationOwnerDto,
+	): Promise<MigrationWorkflowOwnerResponse> {
+		const owner = await this.ownerAssignmentService.assign(workflowId, body.userId, req.user);
+		return { owner };
+	}
+
+	/** Drops the assigned owner. The response carries the heuristic's suggestion, if any. */
+	@Delete('/workflows/:workflowId/owner')
+	@GlobalScope('breakingChanges:migrate')
+	async unassignOwner(
+		_req: AuthenticatedRequest,
+		_res: Response,
+		@Param('workflowId') workflowId: string,
+	): Promise<MigrationWorkflowOwnerResponse> {
+		const owner = await this.ownerAssignmentService.unassign(workflowId);
+		return { owner };
 	}
 
 	/**

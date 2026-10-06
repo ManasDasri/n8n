@@ -329,6 +329,7 @@ export type {
 	BreakingChangeRecommendation,
 	BreakingChangeAffectedWorkflow,
 	BreakingChangeWorkflowOwner,
+	MigrationWorkflowOwnerResponse,
 	MigrationOwnerSource,
 	BreakingChangeInstanceIssue,
 	BreakingChangeWorkflowIssue,

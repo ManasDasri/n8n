@@ -12,6 +12,7 @@ import type { BreakingChangeMigrationService } from '../breaking-changes.migrati
 import { BreakingChangesController } from '../breaking-changes.controller';
 import type { RuleRegistry } from '../breaking-changes.rule-registry.service';
 import type { IBreakingChangeRule } from '../types';
+import type { MigrationOwnerAssignmentService } from '../owners/migration-owner-assignment.service';
 import type { MigrationFindingQueryService } from '../query/migration-finding-query.service';
 import type { MigrationFindingSyncService } from '../sync/migration-finding-sync.service';
 
@@ -51,6 +52,7 @@ describe('BreakingChangesController', () => {
 	let syncService: MockProxy<MigrationFindingSyncService>;
 	let queryService: MockProxy<MigrationFindingQueryService>;
 	let ruleRegistry: MockProxy<RuleRegistry>;
+	let ownerAssignmentService: MockProxy<MigrationOwnerAssignmentService>;
 	let controller: BreakingChangesController;
 
 	beforeEach(() => {
@@ -58,12 +60,42 @@ describe('BreakingChangesController', () => {
 		syncService = mock<MigrationFindingSyncService>();
 		queryService = mock<MigrationFindingQueryService>();
 		ruleRegistry = mock<RuleRegistry>();
+		ownerAssignmentService = mock<MigrationOwnerAssignmentService>();
 		controller = new BreakingChangesController(
 			migrationService,
 			syncService,
 			queryService,
 			ruleRegistry,
+			ownerAssignmentService,
 		);
+	});
+
+	describe('workflow owner', () => {
+		const owner = {
+			id: 'alice',
+			firstName: 'Alice',
+			lastName: 'A',
+			email: 'alice@example.com',
+			source: 'assigned' as const,
+		};
+
+		it('PUT assigns the user from the body as the acting user and returns the owner', async () => {
+			ownerAssignmentService.assign.mockResolvedValue(owner);
+
+			const result = await controller.assignOwner(req, res, 'wf-1', { userId: 'alice' });
+
+			expect(ownerAssignmentService.assign).toHaveBeenCalledWith('wf-1', 'alice', req.user);
+			expect(result).toEqual({ owner });
+		});
+
+		it('DELETE unassigns and returns what the heuristic suggests instead', async () => {
+			ownerAssignmentService.unassign.mockResolvedValue(null);
+
+			const result = await controller.unassignOwner(req, res, 'wf-1');
+
+			expect(ownerAssignmentService.unassign).toHaveBeenCalledWith('wf-1');
+			expect(result).toEqual({ owner: null });
+		});
 	});
 
 	describe('GET /report', () => {
