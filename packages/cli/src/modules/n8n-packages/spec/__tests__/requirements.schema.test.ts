@@ -74,4 +74,60 @@ describe('packageRequirementsSchema', () => {
 
 		expect(() => packageRequirementsSchema.parse(requirements)).toThrow();
 	});
+
+	describe.each([
+		['credentials', { id: 'cred-1', name: 'Model', type: 'openAiApi' }],
+		['workflows', { id: 'wf-1' }],
+		['agents', { id: 'agent-1' }],
+		['dataTables', { id: 'table-1', name: 'Customers' }],
+		['variables', { name: 'REGION' }],
+		['nodeTypes', { type: 'n8n-nodes-base.set', typeVersion: 3 }],
+	])('%s consumer attribution', (collection, requirement) => {
+		it.each([{ usedByWorkflows: [] }, { usedByWorkflows: ['wf-consumer'] }])(
+			'accepts Agent attribution with workflow consumers $usedByWorkflows',
+			({ usedByWorkflows }) => {
+				const input = {
+					[collection]: [{ ...requirement, usedByWorkflows, usedByAgents: ['agent-consumer'] }],
+				};
+				expect(packageRequirementsSchema.parse(input)).toEqual(input);
+			},
+		);
+
+		it.each([
+			{ usedByWorkflows: [] },
+			{ usedByWorkflows: [], usedByAgents: [] },
+			{ usedByAgents: ['agent-consumer'] },
+		])('rejects missing consumer fields: %j', (usage) => {
+			expect(() =>
+				packageRequirementsSchema.parse({ [collection]: [{ ...requirement, ...usage }] }),
+			).toThrow();
+		});
+	});
+
+	it('accepts an ID-only credential for Agent consumers', () => {
+		const requirements = {
+			credentials: [{ id: 'cred-1', usedByWorkflows: [], usedByAgents: ['agent-1'] }],
+		};
+		expect(packageRequirementsSchema.parse(requirements)).toEqual(requirements);
+	});
+
+	it.each([{ name: 'Model' }, { type: 'openAiApi' }, {}])(
+		'requires credential names and types for mixed consumers: %j',
+		(fields) => {
+			expect(() =>
+				packageRequirementsSchema.parse({
+					credentials: [
+						{ id: 'cred-1', ...fields, usedByWorkflows: ['wf-1'], usedByAgents: ['agent-1'] },
+					],
+				}),
+			).toThrow(/required for workflow consumers/);
+		},
+	);
+
+	it('rejects duplicate Agent requirement ids', () => {
+		const agent = { id: 'agent-1', usedByWorkflows: [], usedByAgents: ['agent-consumer'] };
+		expect(() => packageRequirementsSchema.parse({ agents: [agent, agent] })).toThrow(
+			/Duplicate Agent id/,
+		);
+	});
 });

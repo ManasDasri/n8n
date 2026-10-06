@@ -53,7 +53,10 @@ const DEPENDENCY_COLLECTIONS = {
 	tags: 'tags',
 	workflows: 'workflows',
 	nodeTypes: null,
-} as const satisfies Record<keyof PackageRequirements, ManifestEntityCollection | null>;
+} as const satisfies Record<
+	Exclude<keyof PackageRequirements, 'agents'>,
+	ManifestEntityCollection | null
+>;
 
 const GIT_SCOPES = {
 	promote: 'gitConnection:push',

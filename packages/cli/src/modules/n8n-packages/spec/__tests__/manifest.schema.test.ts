@@ -31,6 +31,22 @@ describe('packageManifestSchema', () => {
 		expect(() => packageManifestSchema.parse(manifest)).toThrow(/duplicate/i);
 	});
 
+	it('preserves Agent entries', () => {
+		const agents = [{ id: 'agent-1', name: 'Support', target: 'agents/support' }];
+		expect(packageManifestSchema.parse({ ...validManifest, agents }).agents).toEqual(agents);
+	});
+
+	it('rejects duplicate Agent ids across package locations', () => {
+		const manifest = {
+			...validManifest,
+			agents: [
+				{ id: 'agent-1', name: 'Support', target: 'agents/support' },
+				{ id: 'agent-1', name: 'Copy', target: 'projects/team/agents/copy' },
+			],
+		};
+		expect(() => packageManifestSchema.parse(manifest)).toThrow(/Duplicate Agent id/);
+	});
+
 	it('rejects duplicate credential ids in requirements.credentials', () => {
 		const manifest = {
 			...validManifest,
@@ -157,6 +173,7 @@ describe('packageManifestSchema', () => {
 	it('accepts manifests with unknown sections for forward compatibility', () => {
 		const manifest = {
 			...validManifest,
+			unknownSection: [{ id: 'future-1' }],
 			credentials: [{ id: 'cred-1', name: 'Slack', target: 'credentials/slack' }],
 			requirements: { credentials: [], variables: [] },
 		};
