@@ -447,14 +447,15 @@ export class AgentExecutionOrchestratorService {
 	 * a human-in-the-loop action (button click, modal submission).
 	 */
 	async *resumeForChat(config: ResumeForChatConfig): AsyncGenerator<AgentExecutionStreamChunk> {
-		if (await this.resumeBackgroundForChat(config)) return;
-		const resume = { ...config, usePublishedVersion: config.usePublishedVersion ?? true };
+		// Before the background path too: a background approval resumes a production run.
 		if (
-			resume.source === N8N_CHAT_PRODUCTION_SOURCE &&
-			!(await this.agentRepository.isN8nChatPublished(resume.agentId, resume.projectId))
+			config.source === N8N_CHAT_PRODUCTION_SOURCE &&
+			!(await this.agentRepository.isN8nChatPublished(config.agentId, config.projectId))
 		) {
 			throw new AgentN8nChatUnavailableError();
 		}
+		if (await this.resumeBackgroundForChat(config)) return;
+		const resume = { ...config, usePublishedVersion: config.usePublishedVersion ?? true };
 		const checkpoint = await this.loadResumeCheckpoint(resume);
 		yield* this.withRuntimeLease(
 			async () => await this.getResumeRuntime(resume, checkpoint),

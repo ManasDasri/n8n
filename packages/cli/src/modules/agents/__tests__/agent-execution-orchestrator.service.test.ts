@@ -76,6 +76,8 @@ import {
 	readIntegrationMessageContext,
 } from '../integrations/integration-message-context';
 import type { ToolRegistry } from '../tool-registry';
+import { AgentN8nChatUnavailableError } from '../agent-n8n-chat-unavailable.error';
+import { N8N_CHAT_PRODUCTION_SOURCE } from '../utils/agent-thread-access';
 
 const aiConfigMock = mock<AiConfig>({
 	modelStreamIdleTimeoutMs: 90_000,
@@ -477,6 +479,27 @@ describe('background approvals', () => {
 				}),
 			),
 		).rejects.toThrow('does not belong to this chat');
+		expect(backgroundJobs.resume).not.toHaveBeenCalled();
+	});
+
+	it('rejects an n8n Chat background-approval resume once the agent is unpublished', async () => {
+		const { service, agentRepository, backgroundJobs } = makeService(true);
+		agentRepository.isN8nChatPublished.mockResolvedValue(false);
+
+		await expect(
+			collect(
+				service.resumeForChat({
+					agentId,
+					projectId,
+					runId: 'background-job-job-1',
+					toolCallId: 'gate-1',
+					resumeData: { approved: true },
+					source: N8N_CHAT_PRODUCTION_SOURCE,
+					usePublishedVersion: true,
+				}),
+			),
+		).rejects.toBeInstanceOf(AgentN8nChatUnavailableError);
+		expect(backgroundJobs.getApproval).not.toHaveBeenCalled();
 		expect(backgroundJobs.resume).not.toHaveBeenCalled();
 	});
 
