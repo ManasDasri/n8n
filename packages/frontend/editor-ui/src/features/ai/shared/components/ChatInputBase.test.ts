@@ -210,6 +210,7 @@ describe('ChatInputBase', () => {
 		getByRole('textbox').dispatchEvent(createFileDragEvent('drop', [file]));
 
 		expect(emitted()['files-selected']).toBeFalsy();
+		expect(emitted()['files-rejected']).toEqual([[[file]]]);
 		expect(mockShowError).not.toHaveBeenCalled();
 	});
 
