@@ -85,18 +85,6 @@ export function agentMetadataFilePath(target: string): string {
 	return `${target}/agent-metadata.json`;
 }
 
-const AGENT_ASSET_FILE_NAMES = {
-	skills: 'skill.json',
-	tools: 'tool.json',
-	tasks: 'task.json',
-} as const;
-
-export type AgentAssetCollection = keyof typeof AGENT_ASSET_FILE_NAMES;
-
-export function agentAssetFilePath(collection: AgentAssetCollection, target: string): string {
-	return `${target}/${AGENT_ASSET_FILE_NAMES[collection]}`;
-}
-
 export function createManifestEntry(
 	collection: ManifestEntityCollection,
 	baseDir: string,

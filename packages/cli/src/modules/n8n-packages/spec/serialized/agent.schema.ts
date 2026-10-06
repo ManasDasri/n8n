@@ -1,5 +1,6 @@
 import type { ToolDescriptor } from '@n8n/agents';
 import {
+	AgentJsonConfigBaseSchema,
 	AgentJsonConfigSchema,
 	agentSkillSchema,
 	agentTaskSchema,
@@ -9,47 +10,11 @@ import {
 import { isRecord } from '@n8n/utils/is-record';
 import { z } from 'zod';
 
-import { manifestEntrySchema } from '../manifest.schema';
-
-const assetIndexSchema = z.array(manifestEntrySchema.strict()).superRefine((entries, ctx) => {
-	const ids = new Set<string>();
-	for (const [index, entry] of entries.entries()) {
-		if (ids.has(entry.id)) {
-			ctx.addIssue({
-				code: z.ZodIssueCode.custom,
-				path: [index, 'id'],
-				message: `Duplicate Agent asset id: ${entry.id}`,
-			});
-		}
-		ids.add(entry.id);
-	}
-});
-
-export const serializedAgentSchema = z
-	.object({
-		id: z.string().min(1),
-		name: z.string().min(1).max(128),
-		config: AgentJsonConfigSchema.nullable(),
-		availableInMCP: z.boolean(),
-		skills: assetIndexSchema,
-		tools: assetIndexSchema,
-		tasks: assetIndexSchema,
-	})
-	.strict();
-
-export const serializedAgentMetadataSchema = z
-	.object({
-		versionId: z.string().min(1).nullable(),
-		publishedVersionId: z.string().min(1).nullable(),
-	})
-	.strict();
-
-export const serializedAgentSkillSchema = agentSkillSchema.extend({
-	id: z
-		.string()
-		.min(1)
-		.regex(/^[A-Za-z0-9_-]+$/),
-});
+const skillIdSchema = AgentJsonConfigBaseSchema.shape.skills.unwrap().innerType().element.shape.id;
+const taskIdSchema = AgentJsonConfigBaseSchema.shape.tasks
+	.unwrap()
+	.element.shape.id.max(AGENT_TASK_ID_MAX_LENGTH);
+const customToolIdSchema = z.string().min(1).regex(CUSTOM_TOOL_ID_REGEX);
 
 const toolDescriptorSchema = z
 	.object({
@@ -69,7 +34,6 @@ const toolDescriptorSchema = z
 
 export const serializedAgentToolSchema = z
 	.object({
-		id: z.string().min(1).regex(CUSTOM_TOOL_ID_REGEX),
 		code: z.string(),
 		descriptor: toolDescriptorSchema,
 	})
@@ -77,17 +41,31 @@ export const serializedAgentToolSchema = z
 
 export const serializedAgentTaskSchema = agentTaskSchema
 	.extend({
-		id: z
-			.string()
-			.min(1)
-			.max(AGENT_TASK_ID_MAX_LENGTH)
-			.regex(/^[A-Za-z0-9_-]+$/),
 		timezone: agentTaskSchema.shape.timezone.default(null),
+	})
+	.strict();
+
+export const serializedAgentSchema = z
+	.object({
+		id: z.string().min(1),
+		name: z.string().min(1).max(128),
+		config: AgentJsonConfigSchema.nullable(),
+		availableInMCP: z.boolean(),
+		skills: z.record(skillIdSchema, agentSkillSchema),
+		tools: z.record(customToolIdSchema, serializedAgentToolSchema),
+		tasks: z.record(taskIdSchema, serializedAgentTaskSchema),
+	})
+	.strict();
+
+export const serializedAgentMetadataSchema = z
+	.object({
+		versionId: z.string().min(1).nullable(),
+		publishedVersionId: z.string().min(1).nullable(),
 	})
 	.strict();
 
 export type SerializedAgent = z.infer<typeof serializedAgentSchema>;
 export type SerializedAgentMetadata = z.infer<typeof serializedAgentMetadataSchema>;
-export type SerializedAgentSkill = z.infer<typeof serializedAgentSkillSchema>;
+export type SerializedAgentSkill = z.infer<typeof agentSkillSchema>;
 export type SerializedAgentTool = z.infer<typeof serializedAgentToolSchema>;
 export type SerializedAgentTask = z.infer<typeof serializedAgentTaskSchema>;

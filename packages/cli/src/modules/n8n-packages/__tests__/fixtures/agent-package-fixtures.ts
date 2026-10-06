@@ -1,7 +1,9 @@
+import type { z } from 'zod';
+
 import type { PackageWriter } from '../../io/package-writer';
 import type { ManifestEntry, PackageManifest } from '../../spec/manifest.schema';
 import type {
-	SerializedAgent,
+	serializedAgentSchema,
 	SerializedAgentSkill,
 	SerializedAgentTool,
 } from '../../spec/serialized/agent.schema';
@@ -13,7 +15,6 @@ export interface AgentPackageFixture {
 
 function agentFiles(entry: ManifestEntry, availableInMCP: boolean): Record<string, unknown> {
 	const skill: SerializedAgentSkill = {
-		id: 'shared-skill',
 		name: `${entry.name} reference`,
 		description: 'Use the support reference.',
 		instructions: 'Read references/guide.md.',
@@ -23,7 +24,6 @@ function agentFiles(entry: ManifestEntry, availableInMCP: boolean): Record<strin
 		],
 	};
 	const tool: SerializedAgentTool = {
-		id: 'shared_tool',
 		code: 'throw new Error("Package parsing must not run tool code");',
 		descriptor: {
 			name: 'lookup',
@@ -40,29 +40,31 @@ function agentFiles(entry: ManifestEntry, availableInMCP: boolean): Record<strin
 		},
 	};
 	const task = {
-		id: `${entry.id}_task`,
 		name: 'Daily summary',
 		objective: 'Summarize the open requests.',
 		cronExpression: '0 9 * * *',
 	};
-	const agent: SerializedAgent = {
+	const skillId = 'shared-skill';
+	const toolId = 'shared_tool';
+	const taskId = `${entry.id}_task`;
+	const agent: z.input<typeof serializedAgentSchema> = {
 		id: entry.id,
 		name: entry.name,
 		config: {
 			name: entry.name,
 			model: '',
 			instructions: '',
-			skills: [{ type: 'skill', id: skill.id, enabled: false }],
-			tools: [{ type: 'custom', id: tool.id, enabled: false, requireApproval: true }],
-			tasks: [{ type: 'task', id: task.id, enabled: false }],
+			skills: [{ type: 'skill', id: skillId, enabled: false }],
+			tools: [{ type: 'custom', id: toolId, enabled: false, requireApproval: true }],
+			tasks: [{ type: 'task', id: taskId, enabled: false }],
 			mcpServers: [
 				{ name: 'Reference', url: '', transport: 'streamableHttp', authentication: 'none' },
 			],
 		},
 		availableInMCP,
-		skills: [{ id: skill.id, name: skill.name, target: `${entry.target}/skills/reference` }],
-		tools: [{ id: tool.id, name: tool.descriptor.name, target: `${entry.target}/tools/lookup` }],
-		tasks: [{ id: task.id, name: task.name, target: `${entry.target}/tasks/daily` }],
+		skills: { [skillId]: skill },
+		tools: { [toolId]: tool },
+		tasks: { [taskId]: task },
 	};
 	return {
 		[`${entry.target}/agent.json`]: agent,
@@ -70,9 +72,6 @@ function agentFiles(entry: ManifestEntry, availableInMCP: boolean): Record<strin
 			versionId: 'draft-version',
 			publishedVersionId: 'published-version',
 		},
-		[`${entry.target}/skills/reference/skill.json`]: skill,
-		[`${entry.target}/tools/lookup/tool.json`]: tool,
-		[`${entry.target}/tasks/daily/task.json`]: task,
 	};
 }
 

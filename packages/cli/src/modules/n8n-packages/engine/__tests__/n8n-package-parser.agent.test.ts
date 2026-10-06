@@ -20,20 +20,13 @@ import type { PackageReader } from '../../io/package-reader';
 import { TarPackageReader } from '../../io/tar/tar-package-reader';
 import { TarPackageWriter } from '../../io/tar/tar-package-writer';
 import { PackageImportConfig } from '../../n8n-packages.config';
-import type { SerializedAgent, SerializedAgentTool } from '../../spec/serialized/agent.schema';
+import type { SerializedAgent } from '../../spec/serialized/agent.schema';
 import { N8nPackageParser } from '../n8n-package-parser';
 
 const parser = new N8nPackageParser(mock<Logger>(), mock<NodeTypes>(), mock<WorkflowSerializer>());
 const limits = new PackageImportConfig();
 const agentTarget = 'agents/support';
 const agentPath = `${agentTarget}/agent.json`;
-const bodyPaths = [
-	'agent.json',
-	'agent-metadata.json',
-	'skills/reference/skill.json',
-	'tools/lookup/tool.json',
-	'tasks/daily/task.json',
-];
 
 function memoryReader(fixture: AgentPackageFixture): PackageReader {
 	return {
@@ -50,11 +43,12 @@ function memoryReader(fixture: AgentPackageFixture): PackageReader {
 describe('N8nPackageParser.getAgents', () => {
 	let fixture: AgentPackageFixture;
 	let agent: SerializedAgent;
-	let directory: string;
+	let directory: string | undefined;
 
 	beforeEach(() => {
 		fixture = looseAgentsFixture();
 		agent = fixture.files[agentPath] as SerializedAgent;
+		directory = undefined;
 	});
 
 	afterEach(async () => {
@@ -91,6 +85,7 @@ describe('N8nPackageParser.getAgents', () => {
 		expect(archived.map(({ availableInMCP }) => availableInMCP)).toEqual([true, false]);
 		for (const [index, parsed] of archived.entries()) {
 			const target = input.manifest.agents[index].target;
+			const expected = input.files[`${target}/agent.json`] as SerializedAgent;
 			expect(parsed.config).toMatchObject({
 				model: '',
 				skills: [{ id: 'shared-skill', enabled: false }],
@@ -102,17 +97,16 @@ describe('N8nPackageParser.getAgents', () => {
 				versionId: 'draft-version',
 				publishedVersionId: 'published-version',
 			});
-			expect(parsed.skills).toEqual([input.files[`${target}/skills/reference/skill.json`]]);
-			expect(parsed.tools).toEqual([input.files[`${target}/tools/lookup/tool.json`]]);
-			expect(parsed.tasks).toEqual([
-				{
-					id: `${parsed.sourceAgentId}_task`,
+			expect(parsed.skills).toEqual(expected.skills);
+			expect(parsed.tools).toEqual(expected.tools);
+			expect(parsed.tasks).toEqual({
+				[`${parsed.sourceAgentId}_task`]: {
 					name: 'Daily summary',
 					objective: 'Summarize the open requests.',
 					cronExpression: '0 9 * * *',
 					timezone: null,
 				},
-			]);
+			});
 		}
 	});
 
@@ -132,7 +126,7 @@ describe('N8nPackageParser.getAgents', () => {
 		).toEqual(['support_source']);
 	});
 
-	it('accepts null draft configuration and version metadata', async () => {
+	it('accepts null draft configuration and version metadata with inline bodies', async () => {
 		agent.config = null;
 		fixture.files[`${agentTarget}/agent-metadata.json`] = {
 			versionId: null,
@@ -144,11 +138,13 @@ describe('N8nPackageParser.getAgents', () => {
 			config: null,
 			availableInMCP: true,
 			metadata: { versionId: null, publishedVersionId: null },
+			skills: agent.skills,
+			tools: agent.tools,
 		});
 	});
 
-	it.each(bodyPaths)('rejects a missing %s body', async (bodyPath) => {
-		const filePath = `${agentTarget}/${bodyPath}`;
+	it.each(['agent.json', 'agent-metadata.json'])('rejects a missing %s file', async (fileName) => {
+		const filePath = `${agentTarget}/${fileName}`;
 		delete fixture.files[filePath];
 		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
 			`missing Agent file at ${filePath}`,
@@ -169,27 +165,69 @@ describe('N8nPackageParser.getAgents', () => {
 			{ config: { name: 'Draft', model: '', credential: 'cred-1', instructions: '' } },
 		],
 		['agent-metadata.json', { versionId: undefined }],
-		['skills/reference/skill.json', { instructions: 42 }],
-		['skills/reference/skill.json', { references: [{ path: '../guide.md', content: 'Guide' }] }],
-		['tools/lookup/tool.json', { code: 42 }],
-		['tools/lookup/tool.json', { descriptor: { name: 'Incomplete' } }],
-		['tasks/daily/task.json', { timezone: 'Invalid/Zone' }],
-		['tasks/daily/task.json', { objective: '' }],
-	])('rejects malformed %s: %j', async (bodyPath, fields) => {
-		const filePath = `${agentTarget}/${bodyPath}`;
+	])('rejects malformed %s: %j', async (fileName, fields) => {
+		const filePath = `${agentTarget}/${fileName}`;
 		fixture.files[filePath] = { ...(fixture.files[filePath] as object), ...fields };
 		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
 			`${filePath} failed schema validation`,
 		);
 	});
 
-	it.each(bodyPaths)('rejects runtime fields in the %s envelope', async (bodyPath) => {
-		const filePath = `${agentTarget}/${bodyPath}`;
-		fixture.files[filePath] = { ...(fixture.files[filePath] as object), createdAt: '2026-10-01' };
+	it.each([
+		['skills', 'shared-skill', { instructions: 42 }],
+		['skills', 'shared-skill', { references: [{ path: '../guide.md', content: 'Guide' }] }],
+		['tools', 'shared_tool', { code: 42 }],
+		['tools', 'shared_tool', { descriptor: { name: 'Incomplete' } }],
+		['tasks', 'support_source_task', { timezone: 'Invalid/Zone' }],
+		['tasks', 'support_source_task', { objective: '' }],
+	] as const)('rejects malformed inline %s: %j', async (collection, id, fields) => {
+		fixture.files[agentPath] = {
+			...agent,
+			[collection]: { ...agent[collection], [id]: { ...agent[collection][id], ...fields } },
+		};
 		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
-			`${filePath} failed schema validation`,
+			`${agentPath} failed schema validation`,
 		);
 	});
+
+	it.each([
+		['skills', 'invalid id'],
+		['tools', 'invalid-id'],
+		['tasks', 'x'.repeat(33)],
+	] as const)('validates inline %s body IDs: %s', async (collection, id) => {
+		fixture.files[agentPath] = {
+			...agent,
+			[collection]: { [id]: Object.values(agent[collection])[0] },
+		};
+		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
+			`${agentPath} failed schema validation`,
+		);
+	});
+
+	it.each(['agent.json', 'agent-metadata.json'])(
+		'rejects runtime fields in %s',
+		async (fileName) => {
+			const filePath = `${agentTarget}/${fileName}`;
+			fixture.files[filePath] = { ...(fixture.files[filePath] as object), createdAt: '2026-10-01' };
+			await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
+				`${filePath} failed schema validation`,
+			);
+		},
+	);
+
+	it.each(['skills', 'tools', 'tasks'] as const)(
+		'rejects runtime fields in inline %s bodies',
+		async (collection) => {
+			const [id, body] = Object.entries(agent[collection])[0];
+			fixture.files[agentPath] = {
+				...agent,
+				[collection]: { [id]: { ...body, createdAt: '2026-10-01' } },
+			};
+			await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
+				`${agentPath} failed schema validation`,
+			);
+		},
+	);
 
 	it.each([
 		['inputSchema', []],
@@ -199,65 +237,47 @@ describe('N8nPackageParser.getAgents', () => {
 		['outputTrust', 'trusted'],
 		['providerOptions', []],
 		['runtimeState', {}],
-	])('validates the tool descriptor field %s', async (field, value) => {
-		const filePath = `${agentTarget}/tools/lookup/tool.json`;
-		const tool = fixture.files[filePath] as SerializedAgentTool;
-		fixture.files[filePath] = { ...tool, descriptor: { ...tool.descriptor, [field]: value } };
+	])('validates the inline tool descriptor field %s', async (field, value) => {
+		const tool = agent.tools.shared_tool;
+		fixture.files[agentPath] = {
+			...agent,
+			tools: { shared_tool: { ...tool, descriptor: { ...tool.descriptor, [field]: value } } },
+		};
 		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
-			`${filePath} failed schema validation`,
+			`${agentPath} failed schema validation`,
 		);
 	});
 
-	it.each([
-		'agent.json',
-		'skills/reference/skill.json',
-		'tools/lookup/tool.json',
-		'tasks/daily/task.json',
-	])('rejects an ID mismatch in %s', async (bodyPath) => {
-		const filePath = `${agentTarget}/${bodyPath}`;
-		fixture.files[filePath] = { ...(fixture.files[filePath] as object), id: 'different_id' };
+	it('rejects an Agent ID that does not match the manifest', async () => {
+		agent.id = 'different_id';
 		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
-			`${filePath} declares id "different_id"`,
+			`${agentPath} declares id "different_id"`,
 		);
 	});
 
 	it.each(['skills', 'tools', 'tasks'] as const)(
-		'rejects duplicate %s IDs within an Agent',
+		'requires a body for disabled %s',
 		async (collection) => {
-			agent[collection].push({
-				...agent[collection][0],
-				target: `${agentTarget}/${collection}/duplicate`,
-			});
+			const missingId = Object.keys(agent[collection])[0];
+			agent[collection] = {};
 			await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
-				`${agentPath} failed schema validation`,
+				`${collection} asset "${missingId}" without a body`,
 			);
 		},
 	);
 
-	it.each(['skills', 'tools', 'tasks'] as const)(
-		'requires an indexed body for disabled %s',
-		async (collection) => {
-			const missingId = agent[collection][0].id;
-			agent[collection] = [];
-			await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
-				`${collection} asset "${missingId}" without an indexed body`,
-			);
-		},
-	);
-
-	it('validates indexed bodies that have no configuration reference', async () => {
+	it('validates inline bodies that have no configuration reference', async () => {
 		agent.config = null;
-		fixture.files[`${agentTarget}/skills/reference/skill.json`] = { id: 'shared-skill' };
+		fixture.files[agentPath] = { ...agent, skills: { 'shared-skill': {} } };
 		await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
-			'skills/reference/skill.json failed schema validation',
+			`${agentPath} failed schema validation`,
 		);
 	});
 
 	it.each(['not a cron', '0 9 30 2 *'])(
 		'uses the task cron validator for %s',
 		async (cronExpression) => {
-			const filePath = `${agentTarget}/tasks/daily/task.json`;
-			fixture.files[filePath] = { ...(fixture.files[filePath] as object), cronExpression };
+			agent.tasks.support_source_task.cronExpression = cronExpression;
 			await expect(parser.getAgents(memoryReader(fixture))).rejects.toThrow(
 				'Agent "support_source" task "support_source_task" has an invalid cron expression',
 			);
@@ -277,25 +297,6 @@ describe('N8nPackageParser.getAgents', () => {
 		fixture.manifest.agents[0].target = target;
 		for (const reader of await readers(fixture)) {
 			await expect(parser.getAgents(reader)).rejects.toThrow('Agent "support_source"');
-		}
-	});
-
-	it.each([
-		'agents/support/skills/../../research/skills/reference',
-		'agents/support/skills/reference/../reference',
-		'agents/research/skills/reference',
-		'agents/support/tools/lookup',
-		'agents/support-other/skills/reference',
-		'agents/support/skills/reference/nested',
-		'agents/support/skills\\reference',
-		'/agents/support/skills/reference',
-		'agents/support/skills//reference',
-	])('rejects an invalid asset location: %s', async (target) => {
-		agent.skills[0].target = target;
-		for (const reader of await readers(fixture)) {
-			await expect(parser.getAgents(reader)).rejects.toThrow(
-				'Agent "support_source" skills asset "shared-skill"',
-			);
 		}
 	});
 });

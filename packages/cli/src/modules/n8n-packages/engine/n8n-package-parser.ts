@@ -10,7 +10,6 @@ import * as WorkflowHelpers from '@/workflow-helpers';
 
 import {
 	agentsInScope,
-	assertAgentAssetTarget,
 	deriveParentFolderId,
 	foldersInScope,
 	workflowsInScope,
@@ -22,11 +21,9 @@ import type { PreparedWorkflow } from '../entities/workflow/workflow-import.type
 import { derivePublishedState } from '../entities/workflow/workflow-published-state';
 import { WorkflowSerializer } from '../entities/workflow/workflow.serializer';
 import {
-	agentAssetFilePath,
 	agentMetadataFilePath,
 	entityFilePath,
 	workflowMetadataFilePath,
-	type AgentAssetCollection,
 } from '../io/manifest-entry';
 import type { PackageReader } from '../io/package-reader';
 import type { ManifestEntry, PackageManifest } from '../spec/manifest.schema';
@@ -34,11 +31,7 @@ import { packageManifestSchema } from '../spec/manifest.schema';
 import {
 	serializedAgentSchema,
 	serializedAgentMetadataSchema,
-	serializedAgentSkillSchema,
-	serializedAgentToolSchema,
-	serializedAgentTaskSchema,
 	type SerializedAgent,
-	type SerializedAgentTask,
 } from '../spec/serialized/agent.schema';
 import { serializedDataTableSchema } from '../spec/serialized/data-table.schema';
 import type { SerializedDataTable } from '../spec/serialized/data-table.schema';
@@ -152,35 +145,14 @@ export class N8nPackageParser {
 				`Package Agent at ${path} declares id "${agent.id}" but the manifest lists "${entry.id}".`,
 			);
 		}
-		this.assertAgentAssetsIndexed(agent, path);
+		this.assertAgentBodiesPresent(agent, path);
 
 		const metadata = await this.readAgentFile(
 			reader,
 			agentMetadataFilePath(entry.target),
 			serializedAgentMetadataSchema,
 		);
-		const skills = await this.readAgentAssets(
-			reader,
-			entry,
-			'skills',
-			agent.skills,
-			serializedAgentSkillSchema,
-		);
-		const tools = await this.readAgentAssets(
-			reader,
-			entry,
-			'tools',
-			agent.tools,
-			serializedAgentToolSchema,
-		);
-		const tasks = await this.readAgentAssets(
-			reader,
-			entry,
-			'tasks',
-			agent.tasks,
-			serializedAgentTaskSchema,
-		);
-		await this.validateAgentTaskCrons(agent.id, tasks);
+		await this.validateAgentTaskCrons(agent.id, agent.tasks);
 
 		return {
 			sourceAgentId: agent.id,
@@ -188,66 +160,45 @@ export class N8nPackageParser {
 			config: agent.config,
 			availableInMCP: agent.availableInMCP,
 			metadata,
-			skills,
-			tools,
-			tasks,
+			skills: agent.skills,
+			tools: agent.tools,
+			tasks: agent.tasks,
 		};
 	}
 
 	private async validateAgentTaskCrons(
 		agentId: string,
-		tasks: SerializedAgentTask[],
+		tasks: SerializedAgent['tasks'],
 	): Promise<void> {
-		if (tasks.length === 0) return;
+		if (Object.keys(tasks).length === 0) return;
 		const { isValidCronExpression } = await import(
 			'@/modules/agents/integrations/cron-validation.js'
 		);
-		for (const task of tasks) {
+		for (const [taskId, task] of Object.entries(tasks)) {
 			if (!isValidCronExpression(task.cronExpression)) {
 				throw new UserError(
-					`Package Agent "${agentId}" task "${task.id}" has an invalid cron expression.`,
+					`Package Agent "${agentId}" task "${taskId}" has an invalid cron expression.`,
 				);
 			}
 		}
 	}
 
-	private assertAgentAssetsIndexed(agent: SerializedAgent, path: string): void {
+	private assertAgentBodiesPresent(agent: SerializedAgent, path: string): void {
 		const references = {
 			skills: agent.config?.skills ?? [],
 			tools: agent.config?.tools?.filter((tool) => tool.type === 'custom') ?? [],
 			tasks: agent.config?.tasks ?? [],
 		};
 		for (const collection of ['skills', 'tools', 'tasks'] as const) {
-			const indexedIds = new Set(agent[collection].map(({ id }) => id));
-			const missing = references[collection].find(({ id }) => !indexedIds.has(id));
+			const missing = references[collection].find(
+				({ id }) => !Object.hasOwn(agent[collection], id),
+			);
 			if (missing) {
 				throw new UserError(
-					`Package Agent at ${path} references ${collection} asset "${missing.id}" without an indexed body.`,
+					`Package Agent at ${path} references ${collection} asset "${missing.id}" without a body.`,
 				);
 			}
 		}
-	}
-
-	private async readAgentAssets<T extends { id: string }>(
-		reader: PackageReader,
-		agent: ManifestEntry,
-		collection: AgentAssetCollection,
-		entries: ManifestEntry[],
-		schema: ZodType<T, ZodTypeDef, unknown>,
-	): Promise<T[]> {
-		const assets: T[] = [];
-		for (const entry of entries) {
-			assertAgentAssetTarget(agent, collection, entry);
-			const path = agentAssetFilePath(collection, entry.target);
-			const body = await this.readAgentFile(reader, path, schema);
-			if (body.id !== entry.id) {
-				throw new UserError(
-					`Package Agent asset at ${path} declares id "${body.id}" but its index lists "${entry.id}".`,
-				);
-			}
-			assets.push(body);
-		}
-		return assets;
 	}
 
 	private async readAgentFile<T>(
