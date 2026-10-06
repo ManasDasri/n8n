@@ -450,6 +450,7 @@ oneOf:
                           required:
                             - kind
                             - project
+                      type: object
                     sourceValue:
                       type: string
                       maxLength: 1000
@@ -492,6 +493,7 @@ oneOf:
                     - name
                     - scope
                     - consumers
+              type: object
           accessRequirements:
             type: array
             items:
@@ -1084,6 +1086,7 @@ oneOf:
                     - project
                     - filePath
                     - workflows
+              type: object
           warnings:
             type: array
             items:
@@ -1190,3 +1193,4 @@ oneOf:
       - configId
       - git
       - status
+type: object
