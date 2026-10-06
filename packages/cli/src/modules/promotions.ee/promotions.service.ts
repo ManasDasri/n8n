@@ -196,6 +196,7 @@ export class PromotionsService {
 				{
 					user: actor,
 					projectIds,
+					includeAgents: false,
 					includeVariableValues: true,
 					canExportVariableValues: request.canExportVariableValues,
 					includeTags: true,

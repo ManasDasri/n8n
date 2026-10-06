@@ -27,30 +27,12 @@ import type { PackageRequest } from '../../../types';
 import type { PublicAPIEndpoint } from '../../shared/handler.types';
 import { publicApiCompositeScope } from '../../shared/middlewares/global.middleware';
 
-const PACKAGE_EXPORT_SCOPES = 'project:export,workflow:export';
+const PACKAGE_EXPORT_SCOPES = 'project:export,workflow:export,agent:export';
 
 /** Header carrying the JSON-serialized true per-entity counts of the exported package. */
 const EXPORT_COUNTS_HEADER = 'X-N8n-Export-Counts';
 
-type ExportPackageRequest = AuthenticatedRequest<
-	{},
-	{},
-	{
-		workflowIds?: string[];
-		folderIds?: string[];
-		projectIds?: string[];
-		includeVariableValues?: boolean;
-		includeTags?: boolean;
-		missingWorkflowDependencyPolicy?: 'fail' | 'reference-only' | 'include-in-package';
-		workflowVersionPolicy?:
-			| 'published-strict'
-			| 'prefer-published'
-			| 'ignore-unpublished'
-			| 'latest';
-		credentialExportPolicy?: 'expression-values-only' | 'no-values';
-		includeArchivedWorkflows?: boolean;
-	}
->;
+type ExportPackageRequest = AuthenticatedRequest<{}, {}, ExportPackageRequestDto>;
 
 type ImportPackageRequest = PackageRequest.Import & {
 	files?: Express.Multer.File[];
@@ -68,6 +50,7 @@ type N8nPackagesHandlers = {
 
 function assertPackageExportApiKeyScopes(
 	req: AuthenticatedRequest,
+	agentIds: string[],
 	workflowIds: string[],
 	folderIds: string[],
 	projectIds: string[],
@@ -78,6 +61,9 @@ function assertPackageExportApiKeyScopes(
 	}
 
 	const requiredScopes: ApiKeyScope[] = [];
+	if (agentIds.length > 0) {
+		requiredScopes.push('agent:export');
+	}
 	// Folders are exported as a workflow-organization concern, so they share the workflow:export scope.
 	if (workflowIds.length > 0 || folderIds.length > 0) {
 		requiredScopes.push('workflow:export');
@@ -127,6 +113,7 @@ const n8nPackagesHandlers: N8nPackagesHandlers = {
 	exportPackage: [
 		publicApiCompositeScope(PACKAGE_EXPORT_SCOPES),
 		async (req, res) => {
+			let agentIds: string[] = [];
 			let workflowIds: string[] = [];
 			let folderIds: string[] = [];
 			let projectIds: string[] = [];
@@ -138,22 +125,28 @@ const n8nPackagesHandlers: N8nPackagesHandlers = {
 					throw new BadRequestError(payload.error.errors.map(({ message }) => message).join('; '));
 				}
 
+				agentIds = payload.data.agentIds ?? [];
 				workflowIds = payload.data.workflowIds ?? [];
 				folderIds = payload.data.folderIds ?? [];
 				projectIds = payload.data.projectIds ?? [];
 				includeVariableValues = payload.data.includeVariableValues;
 
-				// A package is either a set of loose workflows/folders or a set of whole projects, not both.
-				if (projectIds.length > 0 && (workflowIds.length > 0 || folderIds.length > 0)) {
-					throw new BadRequestError('Provide either workflowIds/folderIds or projectIds, not both');
+				const hasLooseSelection = [agentIds, workflowIds, folderIds].some((ids) => ids.length > 0);
+				if (projectIds.length > 0 && hasLooseSelection) {
+					throw new BadRequestError(
+						'Provide either agentIds/workflowIds/folderIds or projectIds, not both',
+					);
 				}
 
-				if (workflowIds.length === 0 && folderIds.length === 0 && projectIds.length === 0) {
-					throw new BadRequestError('At least one workflowId, folderId, or projectId is required');
+				if (!hasLooseSelection && projectIds.length === 0) {
+					throw new BadRequestError(
+						'At least one agentId, workflowId, folderId, or projectId is required',
+					);
 				}
 
 				const apiKeyScopes = assertPackageExportApiKeyScopes(
 					req,
+					agentIds,
 					workflowIds,
 					folderIds,
 					projectIds,
@@ -161,6 +154,10 @@ const n8nPackagesHandlers: N8nPackagesHandlers = {
 
 				const exportResult = await Container.get(N8nPackagesService).exportPackage({
 					user: req.user,
+					agentIds,
+					canExportAgents: apiKeyScopes.includes('agent:export'),
+					agentVersionPolicy: payload.data.agentVersionPolicy,
+					missingAgentDependencyPolicy: payload.data.missingAgentDependencyPolicy,
 					workflowIds,
 					folderIds,
 					projectIds,
@@ -178,6 +175,7 @@ const n8nPackagesHandlers: N8nPackagesHandlers = {
 				Container.get(EventService).emit('n8n-package-export-failed', {
 					user: req.user,
 					reason: classifyPackageFailure(error),
+					...(agentIds.length ? { agentIds } : {}),
 					...(workflowIds.length ? { workflowIds } : {}),
 					...(folderIds.length ? { folderIds } : {}),
 					...(projectIds.length ? { projectIds } : {}),

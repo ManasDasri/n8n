@@ -39,6 +39,7 @@ beforeAll(async () => {
 });
 
 const EXPORT_COUNTS = {
+	agents: 0,
 	workflows: 2,
 	folders: 1,
 	credentials: 0,
@@ -188,7 +189,7 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeInstanceOf(BadRequestError);
 			expect(caught).toMatchObject({
-				message: 'Provide either workflowIds/folderIds or projectIds, not both',
+				message: 'Provide either agentIds/workflowIds/folderIds or projectIds, not both',
 			});
 			expect(mockService.exportPackage).not.toHaveBeenCalled();
 		});
@@ -204,7 +205,7 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeInstanceOf(BadRequestError);
 			expect(caught).toMatchObject({
-				message: 'Provide either workflowIds/folderIds or projectIds, not both',
+				message: 'Provide either agentIds/workflowIds/folderIds or projectIds, not both',
 			});
 			expect(mockService.exportPackage).not.toHaveBeenCalled();
 		});
@@ -214,7 +215,7 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeInstanceOf(BadRequestError);
 			expect(caught).toMatchObject({
-				message: 'At least one workflowId, folderId, or projectId is required',
+				message: 'At least one agentId, workflowId, folderId, or projectId is required',
 			});
 			expect(mockService.exportPackage).not.toHaveBeenCalled();
 		});
@@ -271,6 +272,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: ['wf-1'],
 				folderIds: [],
@@ -299,6 +304,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: ['wf-1'],
 				folderIds: [],
@@ -401,6 +410,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: ['wf-1', 'wf-2'],
 				folderIds: [],
@@ -449,6 +462,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: ['wf-1'],
 				folderIds: [],
@@ -535,6 +552,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: [],
 				folderIds: [],
@@ -563,6 +584,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: [],
 				folderIds: ['fld-1'],
@@ -591,6 +616,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: ['wf-1'],
 				folderIds: [],
@@ -619,6 +648,10 @@ describe('n8n-packages handler', () => {
 
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
+				agentIds: [],
+				canExportAgents: false,
+				agentVersionPolicy: 'latest',
+				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
 				workflowIds: ['wf-1'],
 				folderIds: [],

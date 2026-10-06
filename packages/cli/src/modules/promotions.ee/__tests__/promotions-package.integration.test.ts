@@ -1,3 +1,4 @@
+import { AgentJsonConfigSchema } from '@n8n/api-types';
 import { LicenseState } from '@n8n/backend-common';
 import {
 	createTeamProject,
@@ -6,6 +7,7 @@ import {
 	mockInstance,
 	mockLogger,
 	testDb,
+	testModules,
 } from '@n8n/backend-test-utils';
 import type { Project, User } from '@n8n/db';
 import {
@@ -37,6 +39,7 @@ import { mock } from 'vitest-mock-extended';
 
 import { CredentialTypes } from '@/credential-types';
 import { ActiveWorkflowManager } from '@/active-workflow-manager';
+import { AgentRepository } from '@/modules/agents/repositories/agent.repository';
 import { BadRequestError } from '@n8n/errors';
 import { mockDataTableSizeValidator } from '@/modules/data-table/__tests__/test-helpers';
 import { DataTableRepository } from '@/modules/data-table/data-table.repository';
@@ -83,6 +86,7 @@ type TestRemote = {
 	git: SimpleGit;
 };
 
+beforeAll(async () => await testModules.loadModules(['agents']));
 const testServer = setupTestServer({
 	endpointGroups: ['publicApi'],
 	modules: ['n8n-packages', 'promotions', 'data-table'],
@@ -125,6 +129,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+	await Container.get(AgentRepository).delete({});
 	// Delete children before parents to satisfy the foreign keys.
 	await linkRepository.delete({});
 	await configRepository.delete({});
@@ -488,6 +493,17 @@ describe('Promote and Apply', () => {
 			await service.clone(connection.id, 'promote');
 			const originalHead = (await simpleGit(remote.bareDir).revparse(['main'])).trim();
 			const project = await createTeamProject('Orders', owner);
+			await Container.get(AgentRepository).save({
+				id: 'local-agent',
+				name: 'Local Agent',
+				projectId: project.id,
+				schema: AgentJsonConfigSchema.parse({
+					name: 'Local Agent',
+					model: '',
+					instructions: '',
+					subAgents: { agents: [{ agentId: 'external-agent' }] },
+				}),
+			});
 			await createVariable('API_URL', 'https://api.example.com');
 			await buildWorkflowReferencingVariables({
 				name: 'Process order',
@@ -559,6 +575,7 @@ describe('Promote and Apply', () => {
 		).resolves.toBeDefined();
 		expect(result.git).toEqual({ commitSha: remoteHead, branchName: 'main' });
 		expect(result.counts.workflows).toBe(1);
+		expect(manifest.agents).toBeUndefined();
 	});
 
 	it('creates one timestamped branch for each promotion', async () => {
