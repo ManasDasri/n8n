@@ -1,6 +1,15 @@
-import type { AgentJsonNodeToolConfig, AgentJsonWorkflowToolConfig } from '@n8n/api-types';
+import type { User } from '@n8n/db';
 
+import type { PackageWriter } from '../../io/package-writer';
+import type {
+	MissingWorkflowDependencyPolicy,
+	WorkflowVersionPolicy,
+} from '../../n8n-packages.types';
+import type { ManifestEntry } from '../../spec/manifest.schema';
+import type { PackageAgentRequirement } from '../../spec/requirements.schema';
 import type { SerializedAgent, SerializedAgentMetadata } from '../../spec/serialized/agent.schema';
+import type { ExportRequirements } from '../requirements.types';
+import type { AgentWorkflowRequirement } from '../workflow/workflow.types';
 
 export interface PreparedAgentExport {
 	projectId: string;
@@ -8,17 +17,32 @@ export interface PreparedAgentExport {
 	metadata: SerializedAgentMetadata;
 }
 
-export interface AgentCredentialRequirement {
-	credentialId: string;
-	credentialName?: string;
-	credentialType?: string;
+export interface AgentExportRequirements extends ExportRequirements {
+	workflows: AgentWorkflowRequirement[];
+	agentIds: string[];
 }
 
-export interface AgentExportRequirements {
-	agentId: string;
-	projectId: string;
-	credentials: AgentCredentialRequirement[];
-	workflowTools: AgentJsonWorkflowToolConfig[];
+export interface AgentSelectionExportRequest {
+	user: User;
+	writer: PackageWriter;
+	agentIds?: string[];
+	workflowIds?: string[];
+	folderIds?: string[];
+	projectIds?: string[];
+	/** A restricted project export does not select Agents. */
+	projectWorkflowIds?: string[];
+	agentVersionPolicy?: WorkflowVersionPolicy;
+	missingAgentDependencyPolicy?: MissingWorkflowDependencyPolicy;
+	projectTargetsById?: Map<string, string>;
+}
+
+export interface AgentSelectionExportResult {
+	agentEntries: ManifestEntry[];
+	projectEntries: ManifestEntry[];
+	projectTargetsById: Map<string, string>;
+	requirements: ExportRequirements;
+	workflowRequirements: AgentWorkflowRequirement[];
+	agentRequirements: PackageAgentRequirement[];
 	agentIds: string[];
-	nodeTools: AgentJsonNodeToolConfig[];
+	counts: { agents: number };
 }

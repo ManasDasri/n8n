@@ -5,6 +5,9 @@ import type {
 } from '../../n8n-packages.types';
 import type { PackageDataTableRequirement } from '../../spec/requirements.schema';
 import type { SerializedDataTable } from '../../spec/serialized/data-table.schema';
+import type { RequirementSource } from '../requirement-source';
+
+export type DataTableRequirement = RequirementSource & { dataTableId: string };
 
 export interface WorkflowDataTableRequirement {
 	workflowId: string;
