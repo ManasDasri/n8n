@@ -5,6 +5,7 @@ import {
 	BreakingChangeWorkflowRuleResult,
 	WorkflowMigrationResult,
 } from '@n8n/api-types';
+import { EventService } from '@n8n/backend-services';
 import { AuthenticatedRequest } from '@n8n/db';
 import { Get, RestController, GlobalScope, Query, Post, Param } from '@n8n/decorators';
 import { NotFoundError } from '@n8n/errors';
@@ -26,6 +27,7 @@ export class BreakingChangesController {
 		private readonly syncService: MigrationFindingSyncService,
 		private readonly queryService: MigrationFindingQueryService,
 		private readonly ruleRegistry: RuleRegistry,
+		private readonly eventService: EventService,
 	) {}
 
 	/**
@@ -35,26 +37,40 @@ export class BreakingChangesController {
 	@Get('/report')
 	@GlobalScope('breakingChanges:list')
 	async getDetectionReport(
-		_req: AuthenticatedRequest,
+		req: AuthenticatedRequest,
 		_res: Response,
 		@Query query: BreakingChangeReportQueryDto,
 	): Promise<BreakingChangeLightReportResult> {
 		const version = query.version ?? DEFAULT_TARGET_VERSION;
 		await this.syncService.syncIfStale(version);
-		return await this.queryService.getLightReport(version);
+		const report = await this.queryService.getLightReport(version);
+		this.eventService.emit('migration-report-viewed', {
+			user: req.user,
+			targetVersion: version,
+			refreshed: false,
+			report,
+		});
+		return report;
 	}
 
 	/** Re-scans every workflow, updates the finding table, and returns the fresh overview. */
 	@Post('/report/refresh')
 	@GlobalScope('breakingChanges:list')
 	async regenerate(
-		_req: AuthenticatedRequest,
+		req: AuthenticatedRequest,
 		_res: Response,
 		@Query query: BreakingChangeReportQueryDto,
 	): Promise<BreakingChangeLightReportResult> {
 		const version = query.version ?? DEFAULT_TARGET_VERSION;
 		await this.syncService.sync(version);
-		return await this.queryService.getLightReport(version);
+		const report = await this.queryService.getLightReport(version);
+		this.eventService.emit('migration-report-viewed', {
+			user: req.user,
+			targetVersion: version,
+			refreshed: true,
+			report,
+		});
+		return report;
 	}
 
 	/**

@@ -3,6 +3,7 @@ import type {
 	BreakingChangeReportQueryDto,
 	BreakingChangeWorkflowRuleResult,
 } from '@n8n/api-types';
+import type { EventService } from '@n8n/backend-services';
 import type { AuthenticatedRequest } from '@n8n/db';
 import { NotFoundError } from '@n8n/errors';
 import type { Response } from 'express';
@@ -15,7 +16,7 @@ import type { IBreakingChangeRule } from '../types';
 import type { MigrationFindingQueryService } from '../query/migration-finding-query.service';
 import type { MigrationFindingSyncService } from '../sync/migration-finding-sync.service';
 
-const req = mock<AuthenticatedRequest>();
+const req = mock<AuthenticatedRequest>({ user: { id: 'user-1' } });
 const res = mock<Response>();
 
 function lightReport(generatedAt: Date): BreakingChangeLightReportResult {
@@ -51,6 +52,7 @@ describe('BreakingChangesController', () => {
 	let syncService: MockProxy<MigrationFindingSyncService>;
 	let queryService: MockProxy<MigrationFindingQueryService>;
 	let ruleRegistry: MockProxy<RuleRegistry>;
+	let eventService: MockProxy<EventService>;
 	let controller: BreakingChangesController;
 
 	beforeEach(() => {
@@ -58,11 +60,13 @@ describe('BreakingChangesController', () => {
 		syncService = mock<MigrationFindingSyncService>();
 		queryService = mock<MigrationFindingQueryService>();
 		ruleRegistry = mock<RuleRegistry>();
+		eventService = mock<EventService>();
 		controller = new BreakingChangesController(
 			migrationService,
 			syncService,
 			queryService,
 			ruleRegistry,
+			eventService,
 		);
 	});
 
@@ -86,6 +90,20 @@ describe('BreakingChangesController', () => {
 			expect(queryService.getLightReport).toHaveBeenCalledWith('v3');
 			expect(callOrder).toEqual(['syncIfStale', 'getLightReport']);
 			expect(syncService.sync).not.toHaveBeenCalled();
+		});
+
+		it('announces the served overview for telemetry, as a plain view', async () => {
+			const expected = lightReport(new Date('2026-01-01T00:00:00Z'));
+			queryService.getLightReport.mockResolvedValue(expected);
+
+			await controller.getDetectionReport(req, res, { version: 'v3' });
+
+			expect(eventService.emit).toHaveBeenCalledWith('migration-report-viewed', {
+				user: req.user,
+				targetVersion: 'v3',
+				refreshed: false,
+				report: expected,
+			});
 		});
 
 		it('defaults the target version to v2', async () => {
@@ -117,6 +135,20 @@ describe('BreakingChangesController', () => {
 			expect(queryService.getLightReport).toHaveBeenCalledWith('v3');
 			expect(callOrder).toEqual(['sync', 'getLightReport']);
 			expect(syncService.syncIfStale).not.toHaveBeenCalled();
+		});
+
+		it('announces the served overview for telemetry, as a refresh', async () => {
+			const expected = lightReport(new Date('2026-02-01T00:00:00Z'));
+			queryService.getLightReport.mockResolvedValue(expected);
+
+			await controller.regenerate(req, res, { version: 'v3' });
+
+			expect(eventService.emit).toHaveBeenCalledWith('migration-report-viewed', {
+				user: req.user,
+				targetVersion: 'v3',
+				refreshed: true,
+				report: expected,
+			});
 		});
 
 		it('defaults the target version to v2', async () => {
