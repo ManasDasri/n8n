@@ -128,6 +128,17 @@ describe('N8nPackageParser.getAgents', () => {
 		}
 	});
 
+	it('validates manifest targets before reading Agent files in both readers', async () => {
+		fixture.manifest.agents[0].target = 'agents/../other/entry';
+		for (const fileName of ['agent.json', 'agent-metadata.json']) {
+			fixture.files[`other/entry/${fileName}`] = fixture.files[`${agentTarget}/${fileName}`];
+		}
+
+		for (const reader of await readers(fixture)) {
+			await expect(parser.getAgents(reader)).rejects.toThrow('Package manifest failed validation');
+		}
+	});
+
 	it('accepts null draft configuration and version metadata with inline bodies', async () => {
 		agent.config = null;
 		fixture.files[`${agentTarget}/agent-metadata.json`] = {
