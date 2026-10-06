@@ -26,7 +26,6 @@ export interface AgentSelectionExportRequest {
 	user: User;
 	writer: PackageWriter;
 	agentIds?: string[];
-	canExportAgents?: boolean;
 	workflowIds?: string[];
 	folderIds?: string[];
 	projectIds?: string[];

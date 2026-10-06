@@ -273,7 +273,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -305,7 +304,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -411,7 +409,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -463,7 +460,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -553,7 +549,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -585,7 +580,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -617,7 +611,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },
@@ -649,7 +642,6 @@ describe('n8n-packages handler', () => {
 			expect(caught).toBeUndefined();
 			expect(mockService.exportPackage).toHaveBeenCalledWith({
 				agentIds: [],
-				canExportAgents: false,
 				agentVersionPolicy: 'latest',
 				missingAgentDependencyPolicy: 'fail',
 				user: { id: 'user-1' },

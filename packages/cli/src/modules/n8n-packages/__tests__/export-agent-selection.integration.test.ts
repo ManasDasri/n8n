@@ -501,7 +501,7 @@ it.each([{ projectWorkflowIds: [] }, { projectWorkflowIds: ['selected_workflow']
 	async ({ projectWorkflowIds }) => {
 		await createWorkflow({ id: 'selected_workflow', nodes: [] }, project);
 		const result = await Container.get(N8nPackagesService).exportPackageToWriter(
-			{ user: owner, projectIds: [project.id], projectWorkflowIds, canExportAgents: false },
+			{ user: owner, projectIds: [project.id], projectWorkflowIds },
 			new CapturingWriter(),
 		);
 		expect(result.manifest.agents).toBeUndefined();
