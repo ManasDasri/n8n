@@ -317,7 +317,7 @@ export class MicrosoftSharePointTrigger implements INodeType {
 						this.getNode(),
 						`The ${label} being watched is no longer reachable`,
 						{
-							description: `Microsoft Graph returned 404 for ${label} ${targetId} on site ${siteId}. It may have been deleted or renamed, or the credential may have lost access to it. The saved position is kept, so polling resumes if it comes back.`,
+							description: `Microsoft Graph returned 404 for ${label} ${targetId} on site ${siteId}. The ${label} was most likely deleted.${watchingList ? ' A list given by title also returns 404 once someone changes that title.' : ''} A rename alone does not cause this, because the node watches by ID. A credential that lost access returns a permission error instead. The saved position is kept, so polling resumes if the ${label} comes back.`,
 						},
 					)
 				: error;
