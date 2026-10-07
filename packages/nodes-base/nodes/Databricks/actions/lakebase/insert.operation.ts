@@ -2,19 +2,7 @@ import type { IDataObject, IExecuteFunctions, INodeExecutionData } from 'n8n-wor
 
 import { lakebaseApiRequest } from '../../transport';
 import { resolveLakebaseTableUrl } from './helpers';
-
-/**
- * The Data API rejects the whole row for a field the table does not have, so an
- * item carrying anything extra from an earlier node would never insert.
- */
-function columnsPresentInTable(context: IExecuteFunctions, i: number): IDataObject {
-	const item = context.getInputData()[i].json;
-	const schema = context.getNodeParameter('columns.schema', i, []) as Array<{ id?: string }>;
-	const known = new Set(schema.map((field) => field.id));
-	if (known.size === 0) return item;
-
-	return Object.fromEntries(Object.entries(item).filter(([column]) => known.has(column)));
-}
+import { columnsPresentInTable } from './mapping';
 
 export async function execute(this: IExecuteFunctions, i: number): Promise<INodeExecutionData[]> {
 	const url = await resolveLakebaseTableUrl(this, i);
