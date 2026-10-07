@@ -11,6 +11,7 @@ import type { Job, JobFinishedProps, JobId } from './scaling.types';
 
 type PendingJobWait = {
 	jobKey: string;
+	jobId: JobId;
 	resolve: () => void;
 	reject: (error: Error) => void;
 };
@@ -119,7 +120,13 @@ export class JobOutcomeTracker {
 
 		this.executionIdByJobKey.delete(wait.jobKey);
 		wait.jobKey = toJobKey(queueName, job.id);
+		wait.jobId = job.id;
 		this.executionIdByJobKey.set(wait.jobKey, executionId);
+	}
+
+	/** The job ID the wait for this execution is bound to right now, if a wait is pending. */
+	currentJobId(executionId: string): JobId | undefined {
+		return this.pendingWaits.get(executionId)?.jobId;
 	}
 
 	/**
@@ -140,7 +147,7 @@ export class JobOutcomeTracker {
 
 		await new Promise<void>((resolve, reject) => {
 			const jobKey = toJobKey(job.queue.name, job.id);
-			this.pendingWaits.set(executionId, { jobKey, resolve, reject });
+			this.pendingWaits.set(executionId, { jobKey, jobId: job.id, resolve, reject });
 			this.executionIdByJobKey.set(jobKey, executionId);
 			this.startRecheckTimer();
 		});

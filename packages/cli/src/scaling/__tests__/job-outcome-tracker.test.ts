@@ -304,6 +304,16 @@ describe('JobOutcomeTracker', () => {
 			expect(activeExecutions.resolveResponsePromise).toHaveBeenCalledTimes(1);
 		});
 
+		it('should report the fresh job ID as the current one', () => {
+			void tracker.waitFor(job);
+			expect(tracker.currentJobId('exec-1')).toBe('job-1');
+
+			tracker.rebind('jobs', mock<Job>({ id: 'job-2', data: { executionId: 'exec-1' } }));
+
+			expect(tracker.currentJobId('exec-1')).toBe('job-2');
+			expect(tracker.currentJobId('exec-9')).toBeUndefined();
+		});
+
 		it('should do nothing without a pending wait for the execution', () => {
 			const recovered = mock<Job>({ id: 'job-2', data: { executionId: 'exec-9' } });
 

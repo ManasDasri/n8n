@@ -474,12 +474,21 @@ export class ScalingService {
 	}
 
 	async stopJob(job: Job) {
-		const props = { jobId: job.id, executionId: job.data.executionId };
+		const { executionId } = job.data;
+		const props = { jobId: job.id, executionId };
+
+		// The stall sweep may have returned the job under a fresh ID since it was enqueued
+		const currentJobId = this.jobOutcomeTracker.currentJobId(executionId);
 
 		// A removed job emits no completion event, and the caller handles the cancellation
-		this.jobOutcomeTracker.drop(job.data.executionId);
+		this.jobOutcomeTracker.drop(executionId);
 
 		try {
+			if (currentJobId !== undefined && currentJobId !== job.id) {
+				job = (await job.queue.getJob(currentJobId)) ?? job;
+				props.jobId = job.id;
+			}
+
 			if (await job.isActive()) {
 				await job.progress({ kind: 'abort-job' }); // being processed by worker
 				this.logger.debug('Sent abort signal to worker', props);

@@ -990,6 +990,23 @@ describe('ScalingService', () => {
 			expect(result).toBe(true);
 		});
 
+		it('should stop the fresh job when the stall sweep returned the job under a new ID', async () => {
+			await scalingService.setupQueue();
+			const fresh = mock<Job>({ id: 'job-2', isActive: vi.fn().mockResolvedValue(false) });
+			const job = mock<Job>({
+				id: 'job-1',
+				data: { executionId: 'exec-1' },
+				queue: { getJob: vi.fn().mockResolvedValue(fresh) },
+			});
+			jobOutcomeTracker.currentJobId.mockReturnValueOnce('job-2');
+
+			const result = await scalingService.stopJob(job);
+
+			expect(fresh.remove).toHaveBeenCalled();
+			expect(job.remove).not.toHaveBeenCalled();
+			expect(result).toBe(true);
+		});
+
 		it('should report failure to stop a job', async () => {
 			await scalingService.setupQueue();
 			const job = mock<Job>({
