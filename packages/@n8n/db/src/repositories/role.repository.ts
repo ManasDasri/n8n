@@ -1,18 +1,25 @@
 import { Service } from '@n8n/di';
-import { DataSource, EntityManager, In, Repository } from '@n8n/typeorm';
+import { DataSource, EntityManager, In } from '@n8n/typeorm';
 import { UserError } from 'n8n-workflow';
 
+import { BaseRepository } from './base-repository';
 import { Project, ProjectRelation, Role, User } from '../entities';
+import type { OperationContext } from '../services/transaction';
+import { TransactionRunner } from '../services/transaction';
 
 @Service()
-export class RoleRepository extends Repository<Role> {
-	constructor(dataSource: DataSource) {
-		super(Role, dataSource.manager);
+export class RoleRepository extends BaseRepository<Role> {
+	constructor(dataSource: DataSource, transactionRunner: TransactionRunner) {
+		super(Role, dataSource.manager, transactionRunner);
 	}
 
 	async findAll(trx?: EntityManager) {
 		const em = trx ?? this.manager;
 		return await em.find(Role, { relations: ['scopes'] });
+	}
+
+	async findAllInContext(ctx: OperationContext) {
+		return await this.managerFor(ctx).find(Role, { relations: ['scopes'] });
 	}
 
 	async countUsersWithRole(role: Role): Promise<number> {
