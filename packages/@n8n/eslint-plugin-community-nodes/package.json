@@ -28,6 +28,7 @@
     "watch": "tsc --watch --project tsconfig.build.json"
   },
   "dependencies": {
+    "@n8n/constants": "workspace:*",
     "@typescript-eslint/typescript-estree": "catalog:",
     "@typescript-eslint/utils": "catalog:",
     "fastest-levenshtein": "catalog:"
@@ -54,11 +55,11 @@
     "configEmoji": [
       [
         "recommended",
-        "✅"
+        "\u2705"
       ],
       [
         "recommendedWithoutN8nCloudSupport",
-        "☑️"
+        "\u2611\ufe0f"
       ]
     ]
   },

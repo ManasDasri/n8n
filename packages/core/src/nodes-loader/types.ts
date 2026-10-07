@@ -5,7 +5,7 @@ export namespace n8n {
 		n8n?: {
 			credentials?: string[];
 			nodes?: string[];
-			n8nNodesApiVersion?: number;
+			n8nNodesApiVersion?: number | string;
 		};
 		author?: {
 			name?: string;

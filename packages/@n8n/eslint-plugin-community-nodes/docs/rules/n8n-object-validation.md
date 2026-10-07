@@ -17,8 +17,12 @@ register at install time and the failure is opaque to the user.
 This rule enforces the structural contract:
 
 - `package.json` must contain an `n8n` object.
-- `n8n.n8nNodesApiVersion` must be present and a positive integer. It must live
-  inside `n8n`, not at the root.
+- `n8n.n8nNodesApiVersion` must be present and must live inside `n8n`, not at
+  the root.
+- A level is a string `"<major>.<minor>"`, for example `"3.0"` or `"3.1"`.
+  Packages that need no newer node API than level 1 declare the integer `1`,
+  the form n8n read before minor levels existed. A minor level needs the
+  quotes: without them, `3.10` is read as the number `3.1`.
 - `n8n.nodes` must be a non-empty array of strings, each starting with `dist/`.
 - `n8n.credentials`, if present, must be an array of strings, each starting
   with `dist/`.
@@ -53,8 +57,8 @@ the templates published by `@n8n/node-cli` and `@n8n/create-node`.
 {
   "name": "n8n-nodes-example",
   "n8n": {
-    "n8nNodesApiVersion": "1",
-    "nodes": ["nodes/Foo/Foo.node.js"]
+    "n8nNodesApiVersion": 3.1,
+    "nodes": ["dist/nodes/Foo/Foo.node.js"]
   }
 }
 ```
@@ -88,6 +92,16 @@ the templates published by `@n8n/node-cli` and `@n8n/create-node`.
     "n8nNodesApiVersion": 1,
     "nodes": ["dist/nodes/Foo/Foo.node.js"],
     "credentials": ["dist/credentials/Foo.credentials.js"]
+  }
+}
+```
+
+```json
+{
+  "name": "n8n-nodes-example",
+  "n8n": {
+    "n8nNodesApiVersion": "3.1",
+    "nodes": ["dist/nodes/Foo/Foo.node.js"]
   }
 }
 ```

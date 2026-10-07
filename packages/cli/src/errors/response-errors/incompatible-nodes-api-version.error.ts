@@ -8,10 +8,9 @@ export class IncompatibleNodesApiVersionError extends ResponseError {
 	constructor(
 		message: string,
 		readonly meta: {
-			/** API version the package requires, or `null` if the declared value is malformed. */
-			requiredNodesApiVersion: number | null;
-			/** Node API version this runtime supports. */
-			supportedNodesApiVersion: number;
+			/** `null` if the declared value is malformed. */
+			requiredNodesApiVersion: string | null;
+			supportedNodesApiVersion: string;
 		},
 		cause?: unknown,
 	) {
