@@ -614,7 +614,7 @@ describe('workflow review repositories', () => {
 			await inboxRepository.findRequests({
 				visibility: involvedVisibility(),
 				limit: 10,
-				cursor: { createdAt, id: 'req-cursor' },
+				boundary: { mode: 'after', createdAt, id: 'req-cursor' },
 			});
 
 			expect(findOneSpy).not.toHaveBeenCalled();
@@ -624,95 +624,20 @@ describe('workflow review repositories', () => {
 			);
 		});
 
-		describe('category filter', () => {
-			it('leaves the query untouched when no category is requested', async () => {
-				await inboxRepository.findRequests({
-					visibility: allVisibility,
-					limit: 15,
-				});
-
-				expect(queryBuilder.subQuery).not.toHaveBeenCalled();
+		it.each([
+			['before', '<'],
+			['through', '<='],
+		] as const)('supports the %s boundary between sources', async (mode, operator) => {
+			const createdAt = new Date('2026-10-07T00:00:00.000Z');
+			await inboxRepository.findRequests({
+				visibility: allVisibility,
+				limit: 10,
+				boundary: { mode, createdAt },
 			});
-
-			it('correlates both junction subqueries through their entities, never literal table names', async () => {
-				await inboxRepository.findRequests({
-					visibility: allVisibility,
-					category: { userId: 'user-1', category: 'authored' },
-					limit: 15,
-				});
-
-				const [authorSubQuery, reviewerSubQuery] = subQueryBuilders;
-				expect(authorSubQuery.select).toHaveBeenCalledWith('1');
-				expect(authorSubQuery.from).toHaveBeenCalledWith(WorkflowReviewRequestAuthor, 'author');
-				expect(authorSubQuery.where).toHaveBeenCalledWith(
-					'author.workflowReviewRequestId = review.id',
-				);
-				expect(authorSubQuery.andWhere).toHaveBeenCalledWith('author.userId = :categoryUserId');
-				expect(reviewerSubQuery.where).toHaveBeenCalledWith(
-					'reviewer.workflowReviewRequestId = review.id',
-				);
-				expect(reviewerSubQuery.andWhere).toHaveBeenCalledWith('reviewer.userId = :categoryUserId');
-			});
-
-			// The requester always has an author row, so neither predicate needs
-			// the nullable `createdById`.
-			it('matches a non-reviewing author for the authored section', async () => {
-				await inboxRepository.findRequests({
-					visibility: allVisibility,
-					category: { userId: 'user-1', category: 'authored' },
-					limit: 15,
-				});
-
-				expect(queryBuilder.andWhere).toHaveBeenCalledWith(
-					`(EXISTS ${AUTHOR_SUBQUERY_SQL} AND NOT EXISTS ${REVIEWER_SUBQUERY_SQL})`,
-					{ categoryUserId: 'user-1' },
-				);
-			});
-
-			it('matches assigned reviewers first for the waiting section', async () => {
-				await inboxRepository.findRequests({
-					visibility: allVisibility,
-					category: { userId: 'user-1', category: 'waiting' },
-					limit: 15,
-				});
-
-				expect(queryBuilder.andWhere).toHaveBeenCalledWith(
-					`(EXISTS ${REVIEWER_SUBQUERY_SQL} OR NOT EXISTS ${AUTHOR_SUBQUERY_SQL})`,
-					{ categoryUserId: 'user-1' },
-				);
-			});
-
-			it('narrows the visibility predicate instead of replacing it', async () => {
-				await inboxRepository.findRequests({
-					visibility: involvedVisibility(),
-					category: { userId: 'user-1', category: 'waiting' },
-					limit: 15,
-				});
-
-				// Visibility renders first; the category filter may only narrow what it allowed.
-				const visibilityCall = queryBuilder.andWhere.mock.calls[0];
-				const categoryCall = queryBuilder.andWhere.mock.calls[1];
-				expect(visibilityCall[0]).toContain(READABLE_WORKFLOW_SQL);
-				expect(categoryCall[0]).toContain(`NOT EXISTS ${AUTHOR_SUBQUERY_SQL}`);
-			});
-
-			it('applies the category filter before the limit and the cursor boundary', async () => {
-				const createdAt = new Date('2024-01-02T00:00:00.000Z');
-
-				await inboxRepository.findRequests({
-					visibility: allVisibility,
-					category: { userId: 'user-1', category: 'authored' },
-					state: 'open',
-					limit: 15,
-					cursor: { createdAt, id: 'req-cursor' },
-				});
-
-				const categoryCall = queryBuilder.andWhere.mock.invocationCallOrder[0];
-				const cursorCall = queryBuilder.andWhere.mock.invocationCallOrder.at(-1);
-				expect(queryBuilder.andWhere.mock.calls[0][0]).toContain('EXISTS');
-				expect(categoryCall).toBeLessThan(cursorCall!);
-				expect(categoryCall).toBeLessThan(queryBuilder.take.mock.invocationCallOrder[0]);
-			});
+			expect(queryBuilder.andWhere).toHaveBeenCalledWith(
+				`review.createdAt ${operator} :createdAt`,
+				{ createdAt },
+			);
 		});
 	});
 

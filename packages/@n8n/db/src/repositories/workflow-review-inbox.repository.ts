@@ -12,20 +12,9 @@ import {
 } from '../entities/workflow-review-request.ee';
 import { TransactionRunner } from '../services/transaction';
 
-/** The cursor carries its boundary values so deleting the previous page's last row is safe. */
-export type InboxCursor = {
-	createdAt: Date;
-	id: string;
-};
-
-/**
- * Reviewers belong in `waiting`, even when they are also authors. All other authors belong in
- * `authored`. The requester always has an author row, so this does not use `createdById`.
- */
-type InboxCategoryFilter = {
-	userId: string;
-	category: 'waiting' | 'authored';
-};
+export type WorkflowReviewInboxBoundary =
+	| { mode: 'before' | 'through'; createdAt: Date }
+	| { mode: 'after'; createdAt: Date; id: string };
 
 export type InboxVisibility =
 	| { scope: 'all' }
@@ -41,9 +30,8 @@ export type InboxVisibility =
 type FindInboxRequestsOptions = {
 	visibility: InboxVisibility;
 	state?: WorkflowReviewRequestState;
-	category?: InboxCategoryFilter;
 	limit: number;
-	cursor?: InboxCursor;
+	boundary?: WorkflowReviewInboxBoundary;
 };
 
 export type InboxStateCounts = {
@@ -147,35 +135,6 @@ function applyInboxVisibility(
 	);
 }
 
-function applyCategoryFilter(
-	queryBuilder: SelectQueryBuilder<WorkflowReviewRequest>,
-	{ userId, category }: InboxCategoryFilter,
-): void {
-	const authorExists = participantExistsSubquery(
-		queryBuilder,
-		WorkflowReviewRequestAuthor,
-		'author',
-		'categoryUserId',
-	);
-	const reviewerExists = participantExistsSubquery(
-		queryBuilder,
-		WorkflowReviewRequestReviewer,
-		'reviewer',
-		'categoryUserId',
-	);
-
-	if (category === 'authored') {
-		queryBuilder.andWhere(`(EXISTS ${authorExists} AND NOT EXISTS ${reviewerExists})`, {
-			categoryUserId: userId,
-		});
-		return;
-	}
-
-	queryBuilder.andWhere(`(EXISTS ${reviewerExists} OR NOT EXISTS ${authorExists})`, {
-		categoryUserId: userId,
-	});
-}
-
 @Service()
 export class WorkflowReviewInboxRepository extends BaseRepository<WorkflowReviewRequest> {
 	constructor(dataSource: DataSource, transactionRunner: TransactionRunner) {
@@ -183,20 +142,24 @@ export class WorkflowReviewInboxRepository extends BaseRepository<WorkflowReview
 	}
 
 	async findRequests(options: FindInboxRequestsOptions): Promise<WorkflowReviewRequest[]> {
-		const { visibility, state, category, limit, cursor } = options;
+		const { visibility, state, limit, boundary } = options;
 		const queryBuilder = this.createQueryBuilder('review')
 			.orderBy('review.createdAt', 'DESC')
 			.addOrderBy('review.id', 'ASC');
 
 		applyInboxVisibility(queryBuilder, visibility);
-		if (category) applyCategoryFilter(queryBuilder, category);
 		if (state !== undefined) {
 			queryBuilder.andWhere('review.state = :state', { state });
 		}
-		if (cursor) {
+		if (boundary?.mode === 'after') {
 			queryBuilder.andWhere(
 				'(review.createdAt < :createdAt OR (review.createdAt = :createdAt AND review.id > :id))',
-				{ createdAt: cursor.createdAt, id: cursor.id },
+				{ createdAt: boundary.createdAt, id: boundary.id },
+			);
+		} else if (boundary) {
+			queryBuilder.andWhere(
+				`review.createdAt ${boundary.mode === 'through' ? '<=' : '<'} :createdAt`,
+				{ createdAt: boundary.createdAt },
 			);
 		}
 

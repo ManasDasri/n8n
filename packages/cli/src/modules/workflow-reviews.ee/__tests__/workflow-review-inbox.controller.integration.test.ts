@@ -6,7 +6,7 @@ import {
 	shareWorkflowWithUsers,
 	testDb,
 } from '@n8n/backend-test-utils';
-import type { Project, User, WorkflowReviewRequestState } from '@n8n/db';
+import type { Project, User } from '@n8n/db';
 import {
 	UserRepository,
 	WorkflowRepository,
@@ -20,8 +20,7 @@ import { Container } from '@n8n/di';
 import { ActiveWorkflowManager } from '@/active-workflow-manager';
 import { WorkflowReviewPolicyService } from '@/services/workflow-review-policy.service';
 import { WorkflowValidationService } from '@/workflows/workflow-validation.service';
-import { createAdmin, createMember, createUser } from '@test-integration/db/users';
-import { createWorkflowHistoryItem } from '@test-integration/db/workflow-history';
+import { createMember, createUser } from '@test-integration/db/users';
 import type { SuperAgentTest } from '@test-integration/types';
 import * as utils from '@test-integration/utils';
 
@@ -30,7 +29,6 @@ import {
 	seedReview,
 	seedReviewActors,
 	stubWorkflowValidation,
-	versionUpdatePayload,
 } from './support/workflow-review-test-data';
 
 mockInstance(ActiveWorkflowManager);
@@ -39,7 +37,7 @@ const workflowValidationService = mockInstance(WorkflowValidationService);
 const testServer = utils.setupTestServer({
 	endpointGroups: ['workflow-reviews', 'workflows'],
 	enabledFeatures: ['feat:workflowReviews'],
-	modules: ['workflow-reviews'],
+	modules: ['workflow-reviews', 'inbox'],
 });
 
 let owner: User;
@@ -145,29 +143,29 @@ async function seedOrphanedOpenReview() {
 	return orphan;
 }
 
-describe('GET /workflow-review-requests/summary', () => {
+describe('GET /inbox/summary', () => {
 	test('counts open and closed reviews for the instance owner', async () => {
 		await seedInboxRequests();
 
-		const response = await ownerAgent.get('/workflow-review-requests/summary').expect(200);
+		const response = await ownerAgent.get('/inbox/summary').expect(200);
 
-		expect(response.body.data).toEqual({ open: 1, closed: 1 });
+		expect(response.body.data.counts).toEqual({ open: 1, closed: 1 });
 	});
 
 	test('counts the reviews an assigned reviewer was asked to look at', async () => {
 		await seedInboxRequests();
 
-		const response = await memberAgent.get('/workflow-review-requests/summary').expect(200);
+		const response = await memberAgent.get('/inbox/summary').expect(200);
 
-		expect(response.body.data).toEqual({ open: 1, closed: 1 });
+		expect(response.body.data.counts).toEqual({ open: 1, closed: 1 });
 	});
 
 	test('counts nothing for an uninvolved project member', async () => {
 		await seedInboxRequests();
 
-		const response = await viewerAgent.get('/workflow-review-requests/summary').expect(200);
+		const response = await viewerAgent.get('/inbox/summary').expect(200);
 
-		expect(response.body.data).toEqual({ open: 0, closed: 0 });
+		expect(response.body.data.counts).toEqual({ open: 0, closed: 0 });
 	});
 
 	test('counts a requester their own review even without publish scope', async () => {
@@ -178,9 +176,9 @@ describe('GET /workflow-review-requests/summary', () => {
 		});
 		await linkToNewWorkflow(ownRequest.id);
 
-		const response = await viewerAgent.get('/workflow-review-requests/summary').expect(200);
+		const response = await viewerAgent.get('/inbox/summary').expect(200);
 
-		expect(response.body.data).toEqual({ open: 1, closed: 0 });
+		expect(response.body.data.counts).toEqual({ open: 1, closed: 0 });
 	});
 
 	test('still counts an open review orphaned by a workflow hard delete until a sweep closes it', async () => {
@@ -188,28 +186,29 @@ describe('GET /workflow-review-requests/summary', () => {
 		await seedOrphanedOpenReview();
 
 		// Owner exercises the whole-inbox scope, member the involvement filter
-		const ownerResponse = await ownerAgent.get('/workflow-review-requests/summary').expect(200);
-		expect(ownerResponse.body.data).toEqual({ open: 2, closed: 1 });
+		const ownerResponse = await ownerAgent.get('/inbox/summary').expect(200);
+		expect(ownerResponse.body.data.counts).toEqual({ open: 2, closed: 1 });
 
-		const memberResponse = await memberAgent.get('/workflow-review-requests/summary').expect(200);
-		expect(memberResponse.body.data).toEqual({ open: 2, closed: 1 });
+		const memberResponse = await memberAgent.get('/inbox/summary').expect(200);
+		expect(memberResponse.body.data.counts).toEqual({ open: 2, closed: 1 });
 	});
 
-	test('refuses the counts once an admin turns reviews off', async () => {
+	test('omits review counts once an admin turns reviews off', async () => {
 		await policyService.set(false);
 
-		await ownerAgent.get('/workflow-review-requests/summary').expect(403);
+		const response = await ownerAgent.get('/inbox/summary').expect(200);
+		expect(response.body.data).toMatchObject({
+			counts: { open: 0, closed: 0 },
+			disabledSources: ['workflow_review'],
+		});
 	});
 });
 
-describe('GET /workflow-review-requests/inbox', () => {
+describe('GET /inbox', () => {
 	test('shows the instance owner every open review', async () => {
 		const { openRequest, openWorkflow } = await seedInboxRequests();
 
-		const response = await ownerAgent
-			.get('/workflow-review-requests/inbox')
-			.query({ state: 'open', limit: 15 })
-			.expect(200);
+		const response = await ownerAgent.get('/inbox').query({ state: 'open', limit: 15 }).expect(200);
 
 		expect(response.body.data.data).toHaveLength(1);
 		expect(response.body.data.data[0]).toMatchObject({
@@ -226,7 +225,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 	test('shows nothing to an uninvolved project member', async () => {
 		await seedInboxRequests();
 
-		const response = await viewerAgent.get('/workflow-review-requests/inbox').expect(200);
+		const response = await viewerAgent.get('/inbox').expect(200);
 
 		expect(response.body.data.data).toEqual([]);
 		expect(response.body.data.hasMore).toBe(false);
@@ -238,7 +237,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 
 		// Owner exercises the whole-inbox scope, member the involvement filter
 		const ownerResponse = await ownerAgent
-			.get('/workflow-review-requests/inbox')
+			.get('/inbox')
 			.query({ state: 'open', limit: 15 })
 			.expect(200);
 		expect(ownerResponse.body.data.data.map((row: { id: string }) => row.id).sort()).toEqual(
@@ -246,7 +245,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		);
 
 		const memberResponse = await memberAgent
-			.get('/workflow-review-requests/inbox')
+			.get('/inbox')
 			.query({ state: 'open', limit: 15 })
 			.expect(200);
 		expect(memberResponse.body.data.data.map((row: { id: string }) => row.id).sort()).toEqual(
@@ -258,7 +257,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		const { closedRequest } = await seedInboxRequests();
 
 		const response = await ownerAgent
-			.get('/workflow-review-requests/inbox')
+			.get('/inbox')
 			.query({ state: 'closed', limit: 15 })
 			.expect(200);
 
@@ -268,10 +267,11 @@ describe('GET /workflow-review-requests/inbox', () => {
 		]);
 	});
 
-	test('refuses everything once an admin turns reviews off', async () => {
+	test('omits review rows once an admin turns reviews off', async () => {
 		await policyService.set(false);
 
-		await ownerAgent.get('/workflow-review-requests/inbox').expect(403);
+		const response = await ownerAgent.get('/inbox').expect(200);
+		expect(response.body.data).toMatchObject({ data: [], disabledSources: ['workflow_review'] });
 	});
 
 	test('pages through the inbox with a cursor', async () => {
@@ -287,17 +287,14 @@ describe('GET /workflow-review-requests/inbox', () => {
 		);
 		await linkToNewWorkflow(secondRequest.id);
 
-		const firstPage = await ownerAgent
-			.get('/workflow-review-requests/inbox')
-			.query({ state: 'open', limit: 1 })
-			.expect(200);
+		const firstPage = await ownerAgent.get('/inbox').query({ state: 'open', limit: 1 }).expect(200);
 
 		expect(firstPage.body.data.data).toHaveLength(1);
 		expect(firstPage.body.data.hasMore).toBe(true);
 		expect(firstPage.body.data.nextCursor).toBeTruthy();
 
 		const secondPage = await ownerAgent
-			.get('/workflow-review-requests/inbox')
+			.get('/inbox')
 			.query({
 				state: 'open',
 				limit: 1,
@@ -327,10 +324,10 @@ describe('GET /workflow-review-requests/inbox', () => {
 			{},
 		);
 
-		const memberResponse = await memberAgent.get('/workflow-review-requests/inbox').expect(200);
+		const memberResponse = await memberAgent.get('/inbox').expect(200);
 		expect(memberResponse.body.data.data).toEqual([]);
 
-		const ownerResponse = await ownerAgent.get('/workflow-review-requests/inbox').expect(200);
+		const ownerResponse = await ownerAgent.get('/inbox').expect(200);
 		expect(ownerResponse.body.data.data).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
@@ -353,7 +350,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		);
 		await linkToNewWorkflow(ownRequest.id, otherProject);
 
-		const response = await memberAgent.get('/workflow-review-requests/inbox').expect(200);
+		const response = await memberAgent.get('/inbox').expect(200);
 
 		expect(response.body.data.data).toEqual([]);
 	});
@@ -363,10 +360,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		await linkUserToProject(projectAdmin, teamProject, 'project:admin');
 		const { openRequest } = await seedInboxRequests();
 
-		const response = await testServer
-			.authAgentFor(projectAdmin)
-			.get('/workflow-review-requests/inbox')
-			.expect(200);
+		const response = await testServer.authAgentFor(projectAdmin).get('/inbox').expect(200);
 
 		expect(response.body.data.data).toEqual(
 			expect.arrayContaining([expect.objectContaining({ id: openRequest.id })]),
@@ -386,10 +380,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		);
 		await linkToNewWorkflow(secondRequest.id);
 
-		const firstPage = await ownerAgent
-			.get('/workflow-review-requests/inbox')
-			.query({ state: 'open', limit: 1 })
-			.expect(200);
+		const firstPage = await ownerAgent.get('/inbox').query({ state: 'open', limit: 1 }).expect(200);
 		const cursor = firstPage.body.data.nextCursor as string;
 		const firstId = firstPage.body.data.data[0].id as string;
 
@@ -397,7 +388,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		await requestRepository.delete({ id: firstId });
 
 		const secondPage = await ownerAgent
-			.get('/workflow-review-requests/inbox')
+			.get('/inbox')
 			.query({ state: 'open', limit: 1, cursor })
 			.expect(200);
 
@@ -415,10 +406,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		});
 		await linkToNewWorkflow(request.id);
 
-		const response = await ownerAgent
-			.get('/workflow-review-requests/inbox')
-			.query({ state: 'open', limit: 15 })
-			.expect(200);
+		const response = await ownerAgent.get('/inbox').query({ state: 'open', limit: 15 }).expect(200);
 
 		const item = response.body.data.data.find((row: { id: string }) => row.id === request.id);
 		expect(item.requester).toEqual({
@@ -470,10 +458,7 @@ describe('GET /workflow-review-requests/inbox', () => {
 		await userRepository.delete({ id: departedCreator.id });
 		await userRepository.delete({ id: departedReviewer.id });
 
-		const response = await ownerAgent
-			.get('/workflow-review-requests/inbox')
-			.query({ state: 'open', limit: 15 })
-			.expect(200);
+		const response = await ownerAgent.get('/inbox').query({ state: 'open', limit: 15 }).expect(200);
 
 		const rows = response.body.data.data as Array<{
 			id: string;
@@ -496,220 +481,47 @@ describe('GET /workflow-review-requests/inbox', () => {
 		expect(withoutCreator.reviewers).toEqual([]);
 	});
 
-	describe('category filter', () => {
-		/** Mirrors the create endpoint: a requester always gets an author row too. */
-		async function openReviewBy(
-			createdById: string | null,
-			title = 'Review',
-			state: WorkflowReviewRequestState = 'open',
-		) {
-			const request = await requestRepository.createRequest(
-				{ projectId: teamProject.id, title, createdById, state },
-				{},
-			);
-			if (createdById) {
-				await authorRepository.addAuthor(
-					{ workflowReviewRequestId: request.id, userId: createdById },
-					{},
-				);
-			}
-			return request;
-		}
-
-		async function inbox(
-			agent: SuperAgentTest,
-			query: Record<string, unknown>,
-		): Promise<{ ids: string[]; hasMore: boolean; nextCursor: string | null }> {
-			const response = await agent
-				.get('/workflow-review-requests/inbox')
-				.query({ state: 'open', limit: 15, ...query })
-				.expect(200);
-			return {
-				ids: response.body.data.data.map((row: { id: string }) => row.id),
-				hasMore: response.body.data.hasMore,
-				nextCursor: response.body.data.nextCursor,
-			};
-		}
-
-		/** Assign `member` as reviewer so the review is visible to them at all. */
-		async function assignMember(workflowReviewRequestId: string) {
-			await reviewerRepository.addReviewers({ workflowReviewRequestId, userIds: [member.id] }, {});
-		}
-
-		test('splits the visible union by who authored each review', async () => {
-			const mine = await openReviewBy(member.id, 'Submitted by me');
-			const theirs = await openReviewBy(owner.id, 'Submitted by someone else');
-			await assignMember(theirs.id);
-
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([mine.id]);
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([theirs.id]);
+	test('includes authored and assigned reviews in one list', async () => {
+		const mine = await seedReview({ projectId: teamProject.id, author: member, title: 'Mine' });
+		const theirs = await seedReview({
+			projectId: teamProject.id,
+			author: owner,
+			title: 'Assigned',
 		});
+		await reviewerRepository.addReviewers(
+			{ workflowReviewRequestId: theirs.id, userIds: [member.id] },
+			{},
+		);
+		const response = await memberAgent.get('/inbox').expect(200);
+		expect(response.body.data.data.map((row: { id: string }) => row.id).sort()).toEqual(
+			[mine.id, theirs.id].sort(),
+		);
+	});
 
-		test('the two categories add up to the unfiltered list', async () => {
-			await openReviewBy(member.id, 'Mine');
-			const theirs = await openReviewBy(owner.id, 'Theirs');
-			await assignMember(theirs.id);
-			const coAuthored = await openReviewBy(owner.id, 'Co-authored');
-			await authorRepository.addAuthor(
-				{ workflowReviewRequestId: coAuthored.id, userId: member.id },
-				{},
-			);
-
-			const all = await inbox(memberAgent, {});
-			const waiting = await inbox(memberAgent, { category: 'waiting' });
-			const authored = await inbox(memberAgent, { category: 'authored' });
-
-			expect([...waiting.ids, ...authored.ids].sort()).toEqual([...all.ids].sort());
-			expect(waiting.ids.filter((id) => authored.ids.includes(id))).toEqual([]);
+	test('keeps co-authored reviews visible', async () => {
+		const request = await seedReview({
+			projectId: teamProject.id,
+			author: owner,
+			title: 'Co-authored',
 		});
+		await authorRepository.addAuthor(
+			{ workflowReviewRequestId: request.id, userId: member.id },
+			{},
+		);
+		const response = await memberAgent.get('/inbox').expect(200);
+		expect(response.body.data.data).toEqual([expect.objectContaining({ id: request.id })]);
+	});
 
-		test('counts a co-author row as authorship, not just the creator', async () => {
-			const request = await openReviewBy(owner.id, 'Created by owner');
-			await authorRepository.addAuthor(
-				{ workflowReviewRequestId: request.id, userId: member.id },
-				{},
-			);
-
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([request.id]);
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([]);
+	test('shows a requester the review for a workflow shared only with them', async () => {
+		const sharedWorkflow = await createWorkflow({}, owner);
+		await shareWorkflowWithUsers(sharedWorkflow, [member]);
+		const request = await seedReview({
+			projectId: ownerProject.id,
+			workflowId: sharedWorkflow.id,
+			author: member,
+			title: 'Shared with me',
 		});
-
-		test('keeps a review under waiting for its reviewer even after they submit a version to it', async () => {
-			const workflow = await createWorkflow({}, teamProject);
-			await createWorkflowHistoryItem(workflow.id, { versionId: 'version-1' });
-			await createWorkflowHistoryItem(workflow.id, { versionId: 'version-2' });
-			const request = await openReviewBy(owner.id, 'Owner review');
-			await workflowRepository.createWorkflowRow(
-				{
-					workflowReviewRequestId: request.id,
-					workflowId: workflow.id,
-					workflowVersionId: 'version-1',
-				},
-				{},
-			);
-			await assignMember(request.id);
-
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([request.id]);
-
-			await memberAgent
-				.post(`/workflow-review-requests/${request.id}/update-version`)
-				.send(versionUpdatePayload({ workflowId: workflow.id, versionId: 'version-2' }))
-				.expect(200);
-
-			// The reviewer assignment wins over the authorship the re-pin created:
-			// a decision is still expected from them, so the review must not move.
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([request.id]);
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([]);
-		});
-
-		test('puts an admin their own review under authored only, despite global scope', async () => {
-			const admin = await createAdmin();
-			const adminAgent = testServer.authAgentFor(admin);
-			const adminReview = await openReviewBy(admin.id, 'Admin review');
-			const otherReview = await openReviewBy(owner.id, 'Someone else review');
-
-			expect((await inbox(adminAgent, { category: 'authored' })).ids).toEqual([adminReview.id]);
-			expect((await inbox(adminAgent, { category: 'waiting' })).ids).toEqual([otherReview.id]);
-		});
-
-		async function openUnreachableReview(createdById: string, title: string) {
-			const otherProject = await createTeamProject('Unreachable Project', owner);
-			const unreachableWorkflow = await createWorkflow({}, otherProject);
-			const request = await requestRepository.createRequest(
-				{ projectId: otherProject.id, title, createdById, state: 'open' },
-				{},
-			);
-			await workflowRepository.createWorkflowRow(
-				{ workflowReviewRequestId: request.id, workflowId: unreachableWorkflow.id },
-				{},
-			);
-			return request;
-		}
-
-		test("hides a creator's review once they cannot read the workflow it covers", async () => {
-			await openUnreachableReview(member.id, 'Review I submitted elsewhere');
-
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([]);
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([]);
-			expect((await inbox(memberAgent, {})).ids).toEqual([]);
-		});
-
-		test('hides a co-authored review from both categories when its workflow is unreadable', async () => {
-			const request = await openUnreachableReview(owner.id, 'Out of reach');
-			await authorRepository.addAuthor(
-				{ workflowReviewRequestId: request.id, userId: member.id },
-				{},
-			);
-
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([]);
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([]);
-			expect((await inbox(memberAgent, {})).ids).toEqual([]);
-		});
-
-		test('shows a requester the review for a workflow shared only with them', async () => {
-			const sharedWorkflow = await createWorkflow({}, owner);
-			await shareWorkflowWithUsers(sharedWorkflow, [member]);
-			const request = await seedReview({
-				projectId: ownerProject.id,
-				workflowId: sharedWorkflow.id,
-				author: member,
-				title: 'Shared with me',
-			});
-
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([request.id]);
-		});
-
-		// The negation has to be NULL-safe: `createdById` is nullable once the creator
-		// is deleted, and those reviews still need somewhere to show up.
-		test('keeps a review whose creator is gone under waiting', async () => {
-			const orphan = await openReviewBy(null, 'Creatorless');
-			await assignMember(orphan.id);
-
-			// The reviewer reaches it through their assignment; the owner through the
-			// NULL-safe authorship negation (they see everything, and author nobody's).
-			expect((await inbox(memberAgent, { category: 'waiting' })).ids).toEqual([orphan.id]);
-			expect((await inbox(memberAgent, { category: 'authored' })).ids).toEqual([]);
-			expect((await inbox(ownerAgent, { category: 'waiting' })).ids).toEqual([orphan.id]);
-			expect((await inbox(ownerAgent, { category: 'authored' })).ids).toEqual([]);
-		});
-
-		test('paginates each category with its own independent cursor', async () => {
-			const waitingOlder = await openReviewBy(owner.id, 'Waiting older');
-			const waitingNewer = await openReviewBy(owner.id, 'Waiting newer');
-			await assignMember(waitingOlder.id);
-			await assignMember(waitingNewer.id);
-			const authored = await openReviewBy(member.id, 'Authored only');
-
-			const firstWaitingPage = await inbox(memberAgent, { category: 'waiting', limit: 1 });
-			expect(firstWaitingPage.ids).toHaveLength(1);
-			expect(firstWaitingPage.hasMore).toBe(true);
-
-			const secondWaitingPage = await inbox(memberAgent, {
-				category: 'waiting',
-				limit: 1,
-				cursor: firstWaitingPage.nextCursor,
-			});
-			expect(secondWaitingPage.hasMore).toBe(false);
-			expect([...firstWaitingPage.ids, ...secondWaitingPage.ids].sort()).toEqual(
-				[waitingOlder.id, waitingNewer.id].sort(),
-			);
-
-			// The authored section paginates on its own, unaffected by the waiting cursor.
-			const authoredPage = await inbox(memberAgent, { category: 'authored', limit: 1 });
-			expect(authoredPage.ids).toEqual([authored.id]);
-			expect(authoredPage.hasMore).toBe(false);
-			expect(authoredPage.nextCursor).toBeNull();
-		});
-
-		// The category filter ignores `state`, even though the editor sends it only
-		// for open reviews.
-		test('filters closed reviews by category too', async () => {
-			const closedMine = await openReviewBy(member.id, 'Closed mine', 'closed');
-			await openReviewBy(owner.id, 'Closed theirs', 'closed');
-
-			expect((await inbox(memberAgent, { state: 'closed', category: 'authored' })).ids).toEqual([
-				closedMine.id,
-			]);
-		});
+		const response = await memberAgent.get('/inbox').expect(200);
+		expect(response.body.data.data).toEqual([expect.objectContaining({ id: request.id })]);
 	});
 });
