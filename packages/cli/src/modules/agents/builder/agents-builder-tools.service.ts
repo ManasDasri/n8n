@@ -48,7 +48,7 @@ import { ConflictError, LockedError } from '@n8n/errors';
 import { McpRegistryService } from '@/modules/mcp-registry/registry/mcp-registry.service';
 import { NodeTypes } from '@/node-types';
 import { OauthService } from '@/oauth/oauth.service';
-import { userHasScopes } from '@/permissions.ee/check-access';
+import { hasScopes } from '@/permissions.ee/scope-access';
 import { AiGatewayService } from '@/services/ai-gateway.service';
 import { AiService } from '@/services/ai.service';
 import { DynamicNodeParametersService } from '@/services/dynamic-node-parameters.service';
@@ -588,7 +588,7 @@ export class AgentsBuilderToolsService {
 					{ message, sessionId }: { message: string; sessionId?: string },
 					ctx: InterruptibleToolContext<ApprovalSuspendPayload, ApprovalResumePayload>,
 				) => {
-					if (!(await userHasScopes(user, ['agent:execute'], false, { projectId }))) {
+					if (!(await hasScopes(user, ['agent:execute'], false, { projectId }))) {
 						return {
 							status: 'error',
 							code: 'forbidden',
@@ -672,7 +672,7 @@ export class AgentsBuilderToolsService {
 			)
 			.input(z.object({}))
 			.handler(async () => {
-				if (!(await userHasScopes(user, ['agent:unpublish'], false, { projectId }))) {
+				if (!(await hasScopes(user, ['agent:unpublish'], false, { projectId }))) {
 					return {
 						ok: false,
 						errors: [
@@ -716,7 +716,7 @@ export class AgentsBuilderToolsService {
 				}),
 			)
 			.handler(async ({ versionId }: { versionId?: string }) => {
-				if (!(await userHasScopes(user, ['agent:publish'], false, { projectId }))) {
+				if (!(await hasScopes(user, ['agent:publish'], false, { projectId }))) {
 					return {
 						ok: false,
 						errors: [{ message: 'You do not have permission to publish agents in this project.' }],

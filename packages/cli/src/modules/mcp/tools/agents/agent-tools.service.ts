@@ -58,7 +58,7 @@ import { createAgentCredentialProvider } from '@/modules/agents/utils/agent-cred
 import { McpRegistryService } from '@/modules/mcp-registry/registry/mcp-registry.service';
 import { NodeTypes } from '@/node-types';
 import { OauthService } from '@/oauth/oauth.service';
-import { userHasScopes } from '@/permissions.ee/check-access';
+import { hasScopes } from '@/permissions.ee/scope-access';
 import { ProjectScopeService, UrlService } from '@n8n/backend-services';
 import { Telemetry } from '@/telemetry';
 import { createAiMcpFetch } from '@/utils/ai-proxy-fetch';
@@ -746,7 +746,7 @@ export class McpAgentToolsService {
 					const shouldSuggestCallAgent =
 						validation.valid &&
 						isCallAgentAvailable &&
-						(await userHasScopes(user, ['agent:execute'], false, { projectId: agent.projectId }));
+						(await hasScopes(user, ['agent:execute'], false, { projectId: agent.projectId }));
 					return {
 						ok: true,
 						...validation,
@@ -1277,7 +1277,7 @@ export class McpAgentToolsService {
 				};
 			}
 
-			const canOpenPreview = await userHasScopes(user, ['project:read', 'agent:read'], false, {
+			const canOpenPreview = await hasScopes(user, ['project:read', 'agent:read'], false, {
 				projectId,
 			});
 			const previewAccessNote = canOpenPreview
@@ -1817,9 +1817,7 @@ export class McpAgentToolsService {
 		target: { managerCredentialId: string; workspaceId: string },
 	) {
 		// Managed setup stores the new bot token as a credential in the project.
-		if (
-			!(await userHasScopes(user, ['credential:create'], false, { projectId: agent.projectId }))
-		) {
+		if (!(await hasScopes(user, ['credential:create'], false, { projectId: agent.projectId }))) {
 			throw new ForbiddenError('You do not have permission to create credentials in this project.');
 		}
 
@@ -1947,7 +1945,7 @@ export class McpAgentToolsService {
 	}
 
 	private async assertScope(user: User, projectId: string, scope: Scope): Promise<void> {
-		if (!(await userHasScopes(user, [scope], false, { projectId }))) {
+		if (!(await hasScopes(user, [scope], false, { projectId }))) {
 			throw new ForbiddenError('You do not have permission to access agents in this project.');
 		}
 	}
