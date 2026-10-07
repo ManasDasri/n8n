@@ -14,6 +14,62 @@ describe('packageManifestSchema', () => {
 	});
 
 	it.each([
+		['agents', ['agents/support', 'projects/team/agents/support']],
+		[
+			'workflows',
+			[
+				'workflows/support',
+				'folders/support/child/workflows/nested',
+				'projects/team/workflows/support',
+				'projects/team/folders/support/child/workflows/nested',
+			],
+		],
+		[
+			'folders',
+			[
+				'folders/support',
+				'folders/support/child',
+				'projects/team/folders/support',
+				'projects/team/folders/support/child',
+			],
+		],
+	] as const)('accepts root and declared project scopes for %s', (collection, targets) => {
+		const entries = targets.map((target, index) => ({ id: `${index}`, name: 'Support', target }));
+		const manifest = {
+			...validManifest,
+			projects: [{ id: 'project-1', name: 'Team', target: 'projects/team' }],
+			[collection]: entries,
+		};
+		expect(packageManifestSchema.parse(manifest)[collection]).toEqual(entries);
+	});
+
+	it.each([
+		['agents', 'workflows/support'],
+		['workflows', 'agents/support'],
+		['folders', 'workflows/support'],
+		['agents', 'projects/team-other/agents/support'],
+		['workflows', 'projects/team-other/workflows/support'],
+		['folders', 'projects/team-other/folders/support'],
+	])('rejects %s outside a declared scope: %s', (collection, target) => {
+		const manifest = {
+			...validManifest,
+			projects: [{ id: 'project-1', name: 'Team', target: 'projects/team' }],
+			[collection]: [{ id: 'entry', name: 'Support', target }],
+		};
+		expect(packageManifestSchema.safeParse(manifest)).toMatchObject({
+			success: false,
+			error: {
+				issues: [
+					{
+						path: [collection, 0, 'target'],
+						message: `Package ${collection} target "${target}" is outside a declared package scope.`,
+					},
+				],
+			},
+		});
+	});
+
+	it.each([
 		['projects/team/workflows/entry', true],
 		['folders/parent/folders/child/workflows/entry', true],
 		['agents/support', true],

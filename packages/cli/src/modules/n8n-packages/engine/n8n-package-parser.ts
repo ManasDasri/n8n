@@ -8,7 +8,7 @@ import { BadRequestError } from '@n8n/errors';
 import { NodeTypes } from '@/node-types';
 import * as WorkflowHelpers from '@/workflow-helpers';
 
-import { entriesInScope, deriveParentFolderId } from './package-layout';
+import { deriveParentFolderId } from './package-layout';
 import type { PreparedAgent } from '../entities/agent/agent-import.types';
 import type { PreparedFolder } from '../entities/folder/folder-import.types';
 import type { PreparedProject } from '../entities/project/project-import.types';
@@ -18,6 +18,7 @@ import { WorkflowSerializer } from '../entities/workflow/workflow.serializer';
 import {
 	agentMetadataFilePath,
 	entityFilePath,
+	entriesInScope,
 	workflowMetadataFilePath,
 } from '../io/manifest-entry';
 import type { PackageReader } from '../io/package-reader';

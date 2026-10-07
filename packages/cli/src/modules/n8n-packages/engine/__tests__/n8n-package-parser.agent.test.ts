@@ -112,7 +112,6 @@ describe('N8nPackageParser.getAgents', () => {
 
 	it('scopes Agents by the requested package prefix', async () => {
 		const input = projectAgentsFixture();
-		delete input.manifest.projects;
 		input.manifest.agents[1] = fixture.manifest.agents[1];
 		Object.assign(input.files, fixture.files);
 
@@ -128,16 +127,22 @@ describe('N8nPackageParser.getAgents', () => {
 		}
 	});
 
-	it('validates manifest targets before reading Agent files in both readers', async () => {
-		fixture.manifest.agents[0].target = 'agents/../other/entry';
-		for (const fileName of ['agent.json', 'agent-metadata.json']) {
-			fixture.files[`other/entry/${fileName}`] = fixture.files[`${agentTarget}/${fileName}`];
-		}
+	it.each(['agents/../other/entry', 'workflows/support', 'projects/unknown/agents/support'])(
+		'rejects invalid manifest target %s in both readers',
+		async (target) => {
+			fixture.manifest.agents[0].target = target;
+			for (const fileName of ['agent.json', 'agent-metadata.json']) {
+				fixture.files[`${path.posix.normalize(target)}/${fileName}`] =
+					fixture.files[`${agentTarget}/${fileName}`];
+			}
 
-		for (const reader of await readers(fixture)) {
-			await expect(parser.getAgents(reader)).rejects.toThrow('Package manifest failed validation');
-		}
-	});
+			for (const reader of await readers(fixture)) {
+				await expect(parser.getAgents(reader)).rejects.toThrow(
+					'Package manifest failed validation',
+				);
+			}
+		},
+	);
 
 	it('accepts null draft configuration and version metadata with inline bodies', async () => {
 		agent.config = null;

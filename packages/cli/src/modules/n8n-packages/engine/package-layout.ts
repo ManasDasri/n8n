@@ -4,21 +4,9 @@ import { variableMissingModeUsesPackageValue } from '../entities/variable/variab
 import type { PlacedVariableRequirement } from '../entities/variable/variable.types';
 import { VariableConflictPolicy, VariableParentPolicy } from '../n8n-packages.types';
 import type { ImportVariableProperties } from '../n8n-packages.types';
-import { packageDirectory, type ManifestEntityCollection } from '../io/manifest-entry';
 import type { ManifestEntry } from '../spec/manifest.schema';
 import type { PackageVariableRequirement } from '../spec/requirements.schema';
 import type { SerializedVariable } from '../spec/serialized/variable.schema';
-
-export function entriesInScope(
-	entries: ManifestEntry[] | undefined,
-	collections: readonly ManifestEntityCollection[],
-	basePrefix = '',
-): ManifestEntry[] {
-	const prefixes = collections.map((collection) => `${basePrefix}${packageDirectory(collection)}/`);
-	return (entries ?? []).filter((entry) =>
-		prefixes.some((prefix) => entry.target.startsWith(prefix)),
-	);
-}
 
 export function needsBundledVariableValues(
 	request: ImportVariableProperties,

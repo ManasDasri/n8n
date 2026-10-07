@@ -1,6 +1,7 @@
+import { entriesInScope } from '../../io/manifest-entry';
 import type { ManifestEntry } from '../../spec/manifest.schema';
 import type { SerializedVariable } from '../../spec/serialized/variable.schema';
-import { deriveParentFolderId, entriesInScope, placeByLayout } from '../package-layout';
+import { deriveParentFolderId, placeByLayout } from '../package-layout';
 
 const entry = (id: string, target: string): ManifestEntry => ({ id, name: id, target });
 
